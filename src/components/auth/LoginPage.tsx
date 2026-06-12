@@ -10,7 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Activity, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
@@ -39,7 +39,7 @@ const LoginPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [mode, setMode] = useState<"admin" | "patient">("admin");
+  const [mode] = useState<"admin" | "patient">("patient");
   const [step, setStep] = useState<"phone" | "verify">("phone");
   const [loading, setLoading] = useState(false);
   const [sendingOtp, setSendingOtp] = useState(false);
@@ -289,23 +289,7 @@ const LoginPage = () => {
         </CardHeader>
 
         <CardContent className="space-y-6 mt-4">
-          {/* Role Selector */}
-          <div className="flex justify-center gap-2 mb-2 bg-white/30 p-1 rounded-full w-fit mx-auto">
-            <button
-              onClick={() => setMode("admin")}
-              disabled={loading}
-              className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${mode === "admin" ? "bg-white text-[#681da8] shadow-sm" : "text-gray-700 hover:text-gray-900"}`}
-            >
-              Admin
-            </button>
-            <button
-              onClick={() => setMode("patient")}
-              disabled={loading}
-              className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${mode === "patient" ? "bg-white text-[#681da8] shadow-sm" : "text-gray-700 hover:text-gray-900"}`}
-            >
-              Patient
-            </button>
-          </div>
+
 
           {/* Step 1: Phone Input */}
           {step === "phone" && (
