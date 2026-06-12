@@ -1,0 +1,208 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Medical theme - Soft Pastel Baby Blue Background */
+    --background: 200 60% 96%;
+    --foreground: 215 25% 27%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 25% 27%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 25% 27%;
+
+    /* Primary - Medical blue/pink pastels */
+    --primary: 260 60% 65%; /* Soft purple */
+    --primary-foreground: 0 0% 100%;
+    --primary-light: 260 60% 75%;
+    
+    /* Secondary */
+    --secondary: 199 89% 85%;
+    --secondary-foreground: 215 25% 27%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 340 80% 65%; /* Pink accent */
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 158 64% 52%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 43 96% 56%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 260 60% 65%;
+
+    /* Extremely rounded corners for the pill look */
+    --radius: 1.5rem; 
+
+    /* Gradients */
+    --gradient-login-card: linear-gradient(180deg, #dfcbf7 0%, #d8b4e2 100%);
+    --gradient-login-btn: linear-gradient(90deg, #eb4e4e 0%, #b83d8a 100%);
+    --gradient-primary: linear-gradient(135deg, hsl(260 60% 65%), hsl(340 80% 65%));
+    
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+    --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.05);
+    --shadow-glass: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+
+    /* Sidebar - Glassmorphism style */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 215 25% 27%;
+    --sidebar-primary: 260 60% 65%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 40% 96%;
+    --sidebar-accent-foreground: 215 25% 27%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-ring: 260 60% 65%;
+  }
+
+  .dark {
+    --background: 215 28% 17%;
+    --foreground: 0 0% 98%;
+
+    --card: 215 28% 20%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 215 28% 20%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 260 60% 65%;
+    --primary-foreground: 0 0% 100%;
+    
+    --secondary: 215 28% 25%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 215 28% 25%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 340 80% 65%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 215 28% 25%;
+    --input: 215 28% 25%;
+    --ring: 260 60% 65%;
+
+    --sidebar-background: 215 28% 14%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 260 60% 65%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 215 28% 20%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 215 28% 10%;
+    --sidebar-ring: 260 60% 65%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+}
+
+@layer utilities {
+  .gradient-hero {
+    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #311042 100%);
+  }
+
+  .gradient-login-card {
+    background: var(--gradient-login-card);
+  }
+
+  .gradient-login-btn {
+    background: var(--gradient-login-btn);
+  }
+
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+
+  .shadow-glass {
+    box-shadow: var(--shadow-glass);
+  }
+
+  /* Glassmorphism Panel */
+  .glass-panel {
+    @apply bg-white/60 backdrop-blur-xl border border-white/80 shadow-glass;
+  }
+  
+  .dark .glass-panel {
+    @apply bg-black/40 border-white/10;
+  }
+
+  /* Dashboard Wavy Background */
+  .bg-dashboard-wavy {
+    background-color: #dcedf9;
+    background-image: 
+      radial-gradient(circle at 80% -20%, rgba(255,255,255,0.8) 0%, transparent 40%),
+      radial-gradient(circle at -10% 120%, rgba(255,255,255,0.8) 0%, transparent 40%);
+    position: relative;
+    overflow: hidden;
+  }
+  
+  /* Adding some simulated waves via pseudo-elements */
+  .bg-dashboard-wavy::before,
+  .bg-dashboard-wavy::after {
+    content: '';
+    position: absolute;
+    width: 150%;
+    height: 100%;
+    top: 0;
+    left: -25%;
+    background: radial-gradient(ellipse at 50% 100%, rgba(255,255,255,0.3) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  
+  .bg-dashboard-wavy::after {
+    background: radial-gradient(ellipse at 80% 0%, rgba(132, 192, 237, 0.2) 0%, transparent 70%);
+  }
+
+  /* Pastel Card Utilities */
+  .card-pastel-green {
+    @apply bg-[#e6f4ea] text-[#137333] border-[#ceead6];
+  }
+  .card-pastel-red {
+    @apply bg-[#fce8e6] text-[#c5221f] border-[#fad2cf];
+  }
+  .card-pastel-purple {
+    @apply bg-[#f3e8fd] text-[#681da8] border-[#e9d2fd];
+  }
+  .card-pastel-blue {
+    @apply bg-[#e8f0fe] text-[#1967d2] border-[#d2e3fc];
+  }
+  .card-pastel-yellow {
+    @apply bg-[#fef7e0] text-[#b06000] border-[#fce8b2];
+  }
+}
