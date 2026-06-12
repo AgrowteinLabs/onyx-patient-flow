@@ -10,7 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Heart, Phone, Lock, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
@@ -267,169 +267,221 @@ const LoginPage = () => {
   // UI Layout
   // ============================
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-[#dcedf9]">
-      {/* Background Decorative Shapes */}
-      <div className="absolute -bottom-32 -left-32 w-96 h-96 rounded-full bg-gradient-to-tr from-[#c850c0] to-[#ffcc70] opacity-80 mix-blend-multiply blur-2xl"></div>
-      <div className="absolute top-0 right-0 w-[40vw] h-[40vw] rounded-full bg-gradient-to-bl from-[#a1c4fd] to-[#c2e9fb] opacity-60 translate-x-1/4 -translate-y-1/4"></div>
-
-      {/* Main Login Card */}
-      <Card className="w-full max-w-sm mx-4 gradient-login-card border-none shadow-2xl rounded-[30px] z-10 relative overflow-hidden p-2 text-center text-[#2d3748]">
-        <CardHeader className="space-y-1 mt-4">
-          <div className="flex justify-center mb-2">
-            <div className="h-16 w-16 rounded-full bg-[#eb4e4e] flex items-center justify-center shadow-md">
-              {/* Note: Replacing Activity with a Heart icon to match screenshot closely, using a custom SVG for heart if needed, or lucide Heart */}
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" className="w-8 h-8">
-                <path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" />
-              </svg>
-            </div>
+    <div className="min-h-screen flex bg-slate-50 text-slate-800 font-sans">
+      
+      {/* Left Pane: Visuals / Brand Statement (Desktop Only) */}
+      <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 bg-white border-r border-slate-100 relative overflow-hidden">
+        {/* Soft radial glow */}
+        <div className="absolute top-0 left-0 w-96 h-96 rounded-full bg-[#35B7C9]/5 blur-3xl -translate-x-1/3 -translate-y-1/3"></div>
+        <div className="absolute bottom-0 right-0 w-96 h-96 rounded-full bg-[#F2052C]/5 blur-3xl translate-x-1/3 translate-y-1/3"></div>
+        
+        {/* Brand Header */}
+        <div className="flex items-center gap-2 z-10">
+          <div className="h-10 w-10 rounded-xl bg-[#F2052C] flex items-center justify-center text-white shadow-md shadow-[#F2052C]/20">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+              <path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" />
+            </svg>
           </div>
-          <CardTitle className="text-sm font-bold text-[#eb4e4e] tracking-widest uppercase">Onyx Health+</CardTitle>
-          <h2 className="text-3xl font-extrabold text-[#2d3748] mt-2 mb-1">Log In</h2>
-          <CardDescription className="text-[#4a5568] text-xs font-medium">Access your health dashboard</CardDescription>
-        </CardHeader>
+          <span className="font-extrabold text-xl tracking-tight text-slate-800">
+            ONYX <span className="text-[#35B7C9]">HEALTH+</span>
+          </span>
+        </div>
 
-        <CardContent className="space-y-6 mt-4">
+        {/* Content Block */}
+        <div className="my-auto z-10 max-w-lg">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#35B7C9]/10 text-[#35B7C9] border border-[#35B7C9]/20 mb-6 uppercase tracking-wider">
+            Patient Portal
+          </span>
 
+          <h2 className="text-4xl md:text-5xl font-black text-slate-800 tracking-tight leading-none mb-6">
+            Your Health. <br />Simplified & <span className="text-[#35B7C9]">Personal.</span>
+          </h2>
 
-          {/* Step 1: Phone Input */}
-          {step === "phone" && (
-            <div className="space-y-4">
-              <div className="space-y-1 text-left">
-                <Label className="text-[10px] font-bold text-gray-700 ml-3 uppercase tracking-wider">Phone Number</Label>
-                <Input
-                  type="tel"
-                  placeholder="Enter your Phone Number"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  disabled={loading || sendingOtp}
-                  className="rounded-full bg-white border-none shadow-inner h-12 px-5 text-sm placeholder:text-gray-400 focus-visible:ring-1 focus-visible:ring-[#eb4e4e]"
-                />
-              </div>
-              <Button
-                onClick={handleSendOtp}
-                className="w-full gradient-login-btn rounded-full h-12 shadow-lg text-white font-bold tracking-wide hover:opacity-90 transition-opacity"
-                disabled={sendingOtp || !phone}
-              >
-                {sendingOtp ? "Sending OTP..." : "Log in"}
-              </Button>
-            </div>
-          )}
+          <p className="text-slate-600 text-base leading-relaxed mb-8">
+            Connect with providers, view medical histories, schedule visits, and access digital prescriptions all in one secure place.
+          </p>
 
-          {/* Step 2: Verify */}
-          {step === "verify" && (
-            <div className="space-y-4">
-              <div className="space-y-1 text-left">
-                <Label className="text-[10px] font-bold text-gray-700 ml-3 uppercase tracking-wider">OTP</Label>
-                <Input
-                  type="text"
-                  placeholder="Enter 6-digit OTP"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
-                  disabled={loading}
-                  className="rounded-full bg-white border-none shadow-inner h-12 px-5 text-sm placeholder:text-gray-400 focus-visible:ring-1 focus-visible:ring-[#eb4e4e]"
-                />
-              </div>
+          {/* Patient Health Care Illustration */}
+          <div className="w-full flex items-center justify-center p-4 bg-slate-50/50 border border-slate-100 rounded-2xl">
+            <svg className="w-full max-w-[360px] h-auto" viewBox="0 0 400 250" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M10 50 H390 M10 100 H390 M10 150 H390 M10 200 H390" stroke="#f1f5f9" strokeWidth="2"/>
+              
+              <rect x="40" y="30" width="320" height="190" rx="16" fill="white" stroke="#e2e8f0" strokeWidth="2"/>
+              
+              <path d="M60 120 H120 L130 80 L140 150 L150 110 L160 130 L170 120 H340" stroke="#35B7C9" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+              
+              <path d="M220 70 C210 60 190 60 180 70 C170 80 170 100 180 110 L200 130 L220 110 C230 100 230 80 220 70 Z" fill="#F2052C" />
+              
+              <circle cx="100" cy="85" r="18" fill="#35B7C9" fillOpacity="0.08" stroke="#35B7C9" strokeWidth="1.5"/>
+              <path d="M100 75 V85 C100 92 106 98 114 98" stroke="#35B7C9" strokeWidth="1.5" strokeLinecap="round"/>
+              
+              <rect x="250" y="70" width="60" height="8" rx="4" fill="#e2e8f0"/>
+              <rect x="250" y="84" width="45" height="6" rx="3" fill="#f1f5f9"/>
+            </svg>
+          </div>
+        </div>
 
-              {mode === "admin" && (
-                <>
-                  <div className="space-y-1 text-left">
-                    <Label className="text-[10px] font-bold text-gray-700 ml-3 uppercase tracking-wider">Password</Label>
-                    <div className="relative">
-                      <Input
-                        type={showPassword ? "text" : "password"}
-                        placeholder="Enter your password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        disabled={loading}
-                        className="rounded-full bg-white border-none shadow-inner h-12 px-5 pr-12 text-sm placeholder:text-gray-400 focus-visible:ring-1 focus-visible:ring-[#eb4e4e]"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                        disabled={loading}
-                      >
-                        {showPassword ? (
-                          <EyeOff className="h-5 w-5" />
-                        ) : (
-                          <Eye className="h-5 w-5" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex justify-end mt-1">
-                    <button
-                      type="button"
-                      onClick={() => setForgotPasswordOpen(true)}
-                      className="text-xs font-bold text-[#eb4e4e] hover:underline transition-colors mr-2"
-                    >
-                      Forgot password?
-                    </button>
-                  </div>
-                </>
-              )}
-
-              <Button
-                onClick={handleVerify}
-                className="w-full gradient-login-btn rounded-full h-12 shadow-lg text-white font-bold tracking-wide hover:opacity-90 transition-opacity"
-                disabled={loading}
-              >
-                {loading ? "Verifying..." : "Confirm Login"}
-              </Button>
-
-              <button
-                type="button"
-                className="w-full text-xs font-bold text-gray-600 hover:text-gray-900 mt-2"
-                onClick={() => {
-                  setStep("phone");
-                  setOtp("");
-                  setPassword("");
-                  setShowPassword(false);
-                }}
-              >
-                ← Back to Phone Number
-              </button>
-
-              <div className="mt-4 text-center">
-                <button
-                  type="button"
-                  onClick={handleSendOtp}
-                  disabled={timer > 0 || sendingOtp}
-                  className={cn(
-                    "text-xs font-bold transition-all",
-                    timer > 0 ? "text-gray-400 cursor-not-allowed" : "text-[#eb4e4e] hover:underline"
-                  )}
-                >
-                  {timer > 0 ? `Resend OTP in ${timer}s` : "Didn't receive code? Resend OTP"}
-                </button>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Decorative Bottom Left Icons */}
-      <div className="absolute bottom-8 left-8 grid grid-cols-2 gap-4 opacity-80 z-20">
-        <svg className="w-10 h-10 text-white drop-shadow-md" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-        </svg>
-        <svg className="w-10 h-10 text-white drop-shadow-md" viewBox="0 0 24 24" fill="currentColor">
-           <path d="M14.5 1.5c-1.3 1.3-2 3.1-2 4.9v.6h-2v-.6c0-1.8-.7-3.6-2-4.9l1.4-1.4c1.7 1.7 2.6 4 2.6 6.3h2c0-2.3.9-4.6 2.6-6.3l-1.4-1.4zM20 10v9c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2v-9c0-3.3 2.7-6 6-6 1.1 0 2.2.3 3.1.8.9-.5 2-.8 3.1-.8 3.3 0 6 2.7 6 6zm-2 0c0-2.2-1.8-4-4-4-1.5 0-2.8.8-3.5 2h-1c-.7-1.2-2-2-3.5-2-2.2 0-4 1.8-4 4v9h16v-9z"/>
-        </svg>
-        <svg className="w-10 h-10 text-white drop-shadow-md" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M6.5 21C5.1 21 4 19.9 4 18.5V9.4C4 8.1 5.1 7 6.5 7h11C18.9 7 20 8.1 20 9.4v9.1c0 1.4-1.1 2.5-2.5 2.5h-11zM6.5 9C6.2 9 6 9.2 6 9.4v9.1C6 18.8 6.2 19 6.5 19h11c.3 0 .5-.2.5-.5V9.4C18 9.2 17.8 9 17.5 9h-11z M10 11h4v2h-4v-2z M10 15h4v2h-4v-2z"/>
-        </svg>
-        <svg className="w-10 h-10 text-white drop-shadow-md" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm4-9H8v-2h8v2z"/>
-        </svg>
+        {/* Brand Footer */}
+        <div className="text-xs text-slate-400 z-10">
+          © {new Date().getFullYear()} ONYX HEALTH+. Secure & HIPAA Compliant.
+        </div>
       </div>
 
-      {/* Decorative Bottom Right Action Button */}
-      <div className="absolute bottom-8 right-8 z-20">
-        <div className="h-14 w-14 rounded-2xl bg-[#eb4e4e] flex items-center justify-center shadow-lg text-white">
-           <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-           </svg>
+      {/* Right Pane: Login Card */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 relative bg-slate-50">
+        {/* Soft background ambient lights for mobile */}
+        <div className="lg:hidden absolute top-0 left-0 w-80 h-80 rounded-full bg-[#35B7C9]/5 blur-3xl -translate-x-1/3 -translate-y-1/3"></div>
+        <div className="lg:hidden absolute bottom-0 right-0 w-80 h-80 rounded-full bg-[#F2052C]/5 blur-3xl translate-x-1/3 translate-y-1/3"></div>
+
+        <div className="w-full max-w-md z-10">
+          
+          {/* Badge above Card */}
+          <div className="flex justify-center mb-6">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#35B7C9]/10 text-[#35B7C9] border border-[#35B7C9]/20 uppercase tracking-wider">
+              <Heart className="h-3.5 w-3.5" />
+              HEALTH PORTAL
+            </span>
+          </div>
+
+          <Card className="border border-slate-100 bg-white shadow-xl shadow-slate-200/50 rounded-[24px] overflow-hidden p-6 sm:p-8">
+            <CardHeader className="space-y-2 p-0 text-center">
+              <div className="flex justify-center items-center gap-2 mb-2">
+                <div className="h-10 w-10 rounded-xl bg-[#F2052C] flex items-center justify-center text-white shadow-md shadow-[#F2052C]/20">
+                  <Heart className="h-5 w-5" />
+                </div>
+                <span className="font-extrabold text-lg tracking-tight text-slate-800">
+                  ONYX <span className="text-[#35B7C9]">HEALTH+</span>
+                </span>
+              </div>
+              <CardTitle className="text-2xl font-black text-slate-800">Health Portal</CardTitle>
+              <CardDescription className="text-slate-500 text-sm">
+                Access your appointments, health records and healthcare services.
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-6 mt-8 p-0">
+              
+              {/* Step 1: Phone Input */}
+              {step === "phone" && (
+                <div className="space-y-4">
+                  <div className="space-y-1 text-left">
+                    <Label className="text-xs font-bold text-slate-700 ml-1">Phone Number</Label>
+                    <div className="relative">
+                      <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 h-4.5 w-4.5" />
+                      <Input
+                        type="tel"
+                        placeholder="Enter Phone Number"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        disabled={loading || sendingOtp}
+                        className="rounded-xl border border-slate-200 bg-slate-50 h-12 pl-12 pr-5 text-sm placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-[#35B7C9] focus-visible:border-[#35B7C9] transition-all"
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    onClick={handleSendOtp}
+                    className="w-full bg-[#F2052C] hover:bg-[#F2052C]/90 text-white font-bold h-12 rounded-xl transition-all shadow-md shadow-[#F2052C]/15"
+                    disabled={sendingOtp || !phone}
+                  >
+                    {sendingOtp ? "Sending OTP..." : "Get Verification Code"}
+                  </Button>
+                </div>
+              )}
+
+              {/* Step 2: Verify */}
+              {step === "verify" && (
+                <div className="space-y-4">
+                  <div className="space-y-1 text-left">
+                    <Label className="text-xs font-bold text-slate-700 ml-1">Verification Code (OTP)</Label>
+                    <Input
+                      type="text"
+                      placeholder="Enter 6-digit code"
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value)}
+                      disabled={loading}
+                      className="rounded-xl border border-slate-200 bg-slate-50 h-12 px-5 text-sm placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-[#35B7C9] focus-visible:border-[#35B7C9] transition-all"
+                    />
+                  </div>
+
+                  {mode === "admin" && (
+                    <>
+                      <div className="space-y-1 text-left">
+                        <Label className="text-xs font-bold text-slate-700 ml-1">Password</Label>
+                        <div className="relative">
+                          <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 h-4.5 w-4.5" />
+                          <Input
+                            type={showPassword ? "text" : "password"}
+                            placeholder="Enter password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            disabled={loading}
+                            className="rounded-xl border border-slate-200 bg-slate-50 h-12 pl-12 pr-12 text-sm placeholder:text-gray-400 focus-visible:ring-2 focus-visible:ring-[#35B7C9] focus-visible:border-[#35B7C9] transition-all"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                            disabled={loading}
+                          >
+                            {showPassword ? (
+                              <EyeOff className="h-5 w-5" />
+                            ) : (
+                              <Eye className="h-5 w-5" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <div className="flex justify-end mt-1">
+                        <button
+                          type="button"
+                          onClick={() => setForgotPasswordOpen(true)}
+                          className="text-xs font-bold text-[#F2052C] hover:text-[#F2052C]/80 transition-colors"
+                        >
+                          Forgot password?
+                        </button>
+                      </div>
+                    </>
+                  )}
+
+                  <Button
+                    onClick={handleVerify}
+                    className="w-full bg-[#F2052C] hover:bg-[#F2052C]/90 text-white font-bold h-12 rounded-xl transition-all shadow-md shadow-[#F2052C]/15"
+                    disabled={loading}
+                  >
+                    {loading ? "Verifying..." : "Confirm Login"}
+                  </Button>
+
+                  <button
+                    type="button"
+                    className="w-full text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors mt-2"
+                    onClick={() => {
+                      setStep("phone");
+                      setOtp("");
+                      setPassword("");
+                      setShowPassword(false);
+                    }}
+                  >
+                    ← Back to Phone Number
+                  </button>
+
+                  <div className="mt-4 text-center">
+                    <button
+                      type="button"
+                      onClick={handleSendOtp}
+                      disabled={timer > 0 || sendingOtp}
+                      className={cn(
+                        "text-xs font-bold transition-all",
+                        timer > 0 ? "text-slate-400 cursor-not-allowed" : "text-[#35B7C9] hover:underline"
+                      )}
+                    >
+                      {timer > 0 ? `Resend OTP in ${timer}s` : "Didn't receive code? Resend OTP"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
 
@@ -437,8 +489,10 @@ const LoginPage = () => {
       <Dialog open={forgotPasswordOpen} onOpenChange={setForgotPasswordOpen}>
         <DialogContent className="sm:max-w-md rounded-[20px] p-6 border-none shadow-2xl">
           <DialogHeader>
-            <DialogTitle className="text-[#eb4e4e] font-bold text-xl">Reset Password</DialogTitle>
-            <DialogDescription className="text-gray-600 text-sm">
+            <DialogTitle className="text-[#F2052C] font-bold text-xl flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5" /> Reset Password
+            </DialogTitle>
+            <DialogDescription className="text-slate-600 text-sm">
               {forgotPasswordStep === "phone"
                 ? "Enter your mobile number to receive a reset OTP."
                 : "Enter the OTP sent to your phone and your new password."}
@@ -449,51 +503,57 @@ const LoginPage = () => {
             {forgotPasswordStep === "phone" ? (
               <div className="space-y-4">
                 <div className="space-y-1">
-                  <Label className="text-[10px] font-bold text-gray-700 ml-3 uppercase tracking-wider">Mobile Number</Label>
-                  <Input
-                    type="tel"
-                    placeholder="Enter mobile number"
-                    value={forgotPhone}
-                    onChange={(e) => setForgotPhone(e.target.value)}
-                    disabled={forgotLoading}
-                    className="rounded-full bg-gray-50 border-none shadow-inner h-12 px-5 text-sm focus-visible:ring-1 focus-visible:ring-[#eb4e4e]"
-                  />
+                  <Label className="text-xs font-bold text-slate-700 ml-1">Mobile Number</Label>
+                  <div className="relative">
+                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 h-4.5 w-4.5" />
+                    <Input
+                      type="tel"
+                      placeholder="Enter mobile number"
+                      value={forgotPhone}
+                      onChange={(e) => setForgotPhone(e.target.value)}
+                      disabled={forgotLoading}
+                      className="rounded-xl border border-slate-200 bg-slate-50 h-12 pl-12 pr-5 text-sm focus-visible:ring-2 focus-visible:ring-[#F2052C] focus-visible:border-[#F2052C]"
+                    />
+                  </div>
                 </div>
                 <Button
                   onClick={handleForgotRequestOtp}
-                  className="w-full gradient-login-btn rounded-full h-12 shadow-lg text-white font-bold"
+                  className="w-full bg-[#F2052C] hover:bg-[#F2052C]/90 text-white font-bold h-12 rounded-xl transition-all shadow-md shadow-[#F2052C]/15"
                   disabled={forgotLoading || !forgotPhone}
                 >
-                  {forgotLoading ? "Sending OTP..." : "Send OTP"}
+                  {forgotLoading ? "Sending OTP..." : "Send Reset Code"}
                 </Button>
               </div>
             ) : (
               <div className="space-y-5">
                 <div className="space-y-1">
-                  <Label className="text-[10px] font-bold text-gray-700 ml-3 uppercase tracking-wider">OTP</Label>
+                  <Label className="text-xs font-bold text-slate-700 ml-1">OTP</Label>
                   <Input
                     type="text"
                     placeholder="Enter 6-digit OTP"
                     value={forgotOtp}
                     onChange={(e) => setForgotOtp(e.target.value)}
                     disabled={forgotLoading}
-                    className="rounded-full bg-gray-50 border-none shadow-inner h-12 px-5 text-sm focus-visible:ring-1 focus-visible:ring-[#eb4e4e]"
+                    className="rounded-xl border border-slate-200 bg-slate-50 h-12 px-5 text-sm focus-visible:ring-2 focus-visible:ring-[#F2052C] focus-visible:border-[#F2052C]"
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] font-bold text-gray-700 ml-3 uppercase tracking-wider">New Password</Label>
-                  <Input
-                    type="password"
-                    placeholder="Enter new password (min 8 chars)"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    disabled={forgotLoading}
-                    className="rounded-full bg-gray-50 border-none shadow-inner h-12 px-5 text-sm focus-visible:ring-1 focus-visible:ring-[#eb4e4e]"
-                  />
+                  <Label className="text-xs font-bold text-slate-700 ml-1">New Password</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 h-4.5 w-4.5" />
+                    <Input
+                      type="password"
+                      placeholder="Enter new password (min 8 chars)"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      disabled={forgotLoading}
+                      className="rounded-xl border border-slate-200 bg-slate-50 h-12 pl-12 pr-5 text-sm focus-visible:ring-2 focus-visible:ring-[#F2052C] focus-visible:border-[#F2052C]"
+                    />
+                  </div>
                 </div>
                 <Button
                   onClick={handleForgotResetPassword}
-                  className="w-full gradient-login-btn rounded-full h-12 shadow-lg text-white font-bold"
+                  className="w-full bg-[#F2052C] hover:bg-[#F2052C]/90 text-white font-bold h-12 rounded-xl transition-all shadow-md shadow-[#F2052C]/15"
                   disabled={forgotLoading || !forgotOtp || !newPassword}
                 >
                   {forgotLoading ? "Resetting..." : "Reset Password"}
@@ -505,7 +565,7 @@ const LoginPage = () => {
                     disabled={forgotTimer > 0 || forgotLoading}
                     className={cn(
                       "text-xs font-bold transition-all",
-                      forgotTimer > 0 ? "text-gray-400 cursor-not-allowed" : "text-[#eb4e4e] hover:underline"
+                      forgotTimer > 0 ? "text-slate-400 cursor-not-allowed" : "text-[#35B7C9] hover:underline"
                     )}
                   >
                     {forgotTimer > 0 ? `Resend OTP in ${forgotTimer}s` : "Didn't receive code? Resend OTP"}
