@@ -1,4 +1,4 @@
-export const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || '';
+export const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || 'https://api.onyxhealthplus.com';
 
 export const API_ENDPOINTS = {
   // Auth endpoints
