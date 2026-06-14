@@ -27,11 +27,15 @@ import UserDashboard from "./pages/dashboard/user/UserDashboard";
 /* =======================
    User pages
 ======================= */
-import Sessions from "./pages/dashboard/user/Sessions";
-import Consultancy from "./pages/dashboard/user/Consultancy";
-import Profile from "./pages/dashboard/user/Profile";
+import Profiles from "./pages/dashboard/user/Profiles";
+import Appointments from "./pages/dashboard/user/Appointments";
+import ReportsPage from "./pages/dashboard/user/ReportsPage";
+import Prescriptions from "./pages/dashboard/user/Prescriptions";
+import Consultations from "./pages/dashboard/user/Consultations";
+import Doctors from "./pages/dashboard/user/Doctors";
+import Tickets from "./pages/dashboard/user/Tickets";
+import Settings from "./pages/dashboard/user/Settings";
 import Payments from "./pages/dashboard/shared/Payments";
-import EA_Reports from "./pages/dashboard/executive-admin/EA_Reports";
 
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 
@@ -98,11 +102,15 @@ const App = () => (
           ======================== */}
           <Route element={<ProtectedRoute allowedRoles={["user", "executive", "executive-admin"]} />}>
             <Route path="/dashboard/user" element={<UserDashboard />}>
-              <Route index element={<Profile />} />
-              <Route path="profile" element={<Profile />} />
-              <Route path="reports" element={<EA_Reports />} />
-              <Route path="sessions" element={<Sessions />} />
-              <Route path="consultancy" element={<Consultancy />} />
+              <Route index element={<Appointments />} />
+              <Route path="profiles" element={<Profiles />} />
+              <Route path="appointments" element={<Appointments />} />
+              <Route path="reports" element={<ReportsPage />} />
+              <Route path="prescriptions" element={<Prescriptions />} />
+              <Route path="consultations" element={<Consultations />} />
+              <Route path="doctors" element={<Doctors />} />
+              <Route path="tickets" element={<Tickets />} />
+              <Route path="settings" element={<Settings />} />
               <Route path="payments" element={<Payments />} />
             </Route>
           </Route>

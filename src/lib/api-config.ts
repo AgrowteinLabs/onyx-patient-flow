@@ -11,6 +11,15 @@ export const API_ENDPOINTS = {
     RESET_PASSWORD: '/api/auth/reset-password',
   },
   
+  // Profile endpoints
+  PROFILE: {
+    CREATE: '/create/profile',
+    GET_ALL: '/get/deviceprofile',
+    VIEW: (id: string) => `/view/profile/${id}`,
+    UPDATE: (id: string) => `/update/profile/${id}`,
+    DELETE: (id: string) => `/delete/profile/${id}`,
+  },
+  
   // Session endpoints
   SESSION: {
     GET_ALL: '/api/session/sessionDetails',
@@ -33,5 +42,30 @@ export const API_ENDPOINTS = {
   REPORT: {
     BY_USER: (id: string) => `/api/report/byUser/${id}`,
     BY_SESSION: (id: string) => `/api/report/bySession/${id}`,
+    BY_PROFILE: (id: string) => `/api/report/byProfile/${id}`,
   },
+
+  // Doctor endpoints
+  DOCTOR: {
+    LIST: '/api/doctor/list',
+    AVAILABILITY: (id: string) => `/api/doctor/availability/${id}`,
+  },
+
+  // Booking endpoints
+  BOOKING: {
+    CREATE: '/api/booking/create',
+    CONFIRM: '/api/booking/confirm',
+    LIST: '/api/booking/list',
+  },
+
+  // Ticket endpoints
+  TICKET: {
+    CREATE: '/api/ticket/create',
+    ADMIN_LIST: '/api/ticket/admin/list',
+  },
+
+  // Video endpoints
+  VIDEO: {
+    TOKEN: (bookingId: string) => `/api/video/token/${bookingId}`,
+  }
 };

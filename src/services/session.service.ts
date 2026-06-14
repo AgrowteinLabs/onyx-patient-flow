@@ -9,10 +9,13 @@ export interface Session {
 
 export const listSessions = async (status?: string): Promise<Session[]> => {
   const params = status ? { status } : {};
-  return apiRequest(API_ENDPOINTS.SESSION.GET_ALL, {
+  const res: any = await apiRequest(API_ENDPOINTS.SESSION.GET_ALL, {
     method: 'GET',
     params,
   });
+  if (!res) return [];
+  const list = res.sessions || res.sessionDetails || res.data || (Array.isArray(res) ? res : []);
+  return Array.isArray(list) ? list : [];
 };
 
 export const viewSession = async (id: string): Promise<Session> => {

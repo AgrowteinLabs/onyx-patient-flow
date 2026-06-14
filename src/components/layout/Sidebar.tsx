@@ -3,10 +3,14 @@ import { useNavigate, useLocation } from "react-router-dom";
 
 import {
   LayoutDashboard,
-  User2,
+  Users,
+  Calendar,
   FileText,
-  Activity,
+  Pill,
+  Video,
   Stethoscope,
+  Ticket,
+  Settings,
   LogOut,
 } from "lucide-react";
 
@@ -40,14 +44,14 @@ const Sidebar = () => {
         path: "/dashboard/user",
       },
       {
-        label: "Profile",
-        icon: User2,
-        path: "/dashboard/user/profile",
+        label: "My Profiles",
+        icon: Users,
+        path: "/dashboard/user/profiles",
       },
       {
-        label: "Sessions",
-        icon: Activity,
-        path: "/dashboard/user/sessions",
+        label: "Appointments",
+        icon: Calendar,
+        path: "/dashboard/user/appointments",
       },
       {
         label: "Reports",
@@ -55,9 +59,29 @@ const Sidebar = () => {
         path: "/dashboard/user/reports",
       },
       {
+        label: "Prescriptions",
+        icon: Pill,
+        path: "/dashboard/user/prescriptions",
+      },
+      {
         label: "Consultations",
+        icon: Video,
+        path: "/dashboard/user/consultations",
+      },
+      {
+        label: "Doctors",
         icon: Stethoscope,
-        path: "/dashboard/user/consultancy",
+        path: "/dashboard/user/doctors",
+      },
+      {
+        label: "Support Tickets",
+        icon: Ticket,
+        path: "/dashboard/user/tickets",
+      },
+      {
+        label: "Settings",
+        icon: Settings,
+        path: "/dashboard/user/settings",
       },
     ],
   };
