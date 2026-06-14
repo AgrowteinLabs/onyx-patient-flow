@@ -87,16 +87,8 @@ const Topbar = () => {
     <header className="h-[80px] flex items-center justify-between px-8 mx-2 mb-4 bg-white/70 backdrop-blur-xl rounded-[20px] border border-white/80 shadow-md z-10 relative">
       {/* Left side – Hospital Logo & Branding */}
       <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate("/dashboard/user")}>
-          <div className="h-8 w-8 bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] rounded-lg flex items-center justify-center text-white font-black text-lg shadow-sm">
-            O
-          </div>
-          <div>
-            <h1 className="text-lg font-black tracking-tight text-[#1e293b] leading-none">
-              onyx<span className="text-[#0ea5e9]">health</span>
-            </h1>
-            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block mt-0.5">Patient Portal</span>
-          </div>
+        <div className="flex items-center cursor-pointer" onClick={() => navigate("/dashboard/user")}>
+          <img src="/ONYXHPLOGO.png" alt="Onyx Health+" className="h-11 w-auto object-contain" />
         </div>
       </div>
 

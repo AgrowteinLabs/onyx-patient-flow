@@ -10,7 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Eye, EyeOff, Heart, Phone, Lock, CheckCircle2, Shield, Stethoscope, HeartPulse } from "lucide-react";
+import { Eye, EyeOff, Heart, Phone, Lock, CheckCircle2, Shield, Stethoscope, HeartPulse, Plus, Activity, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
@@ -280,37 +280,21 @@ const LoginPage = () => {
 
       {/* Floating Healthcare decorative elements */}
       <div className="absolute top-[15%] left-[5%] opacity-20 pointer-events-none hidden md:block animate-pulse">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#35B7C9" strokeWidth="2">
-          <path d="M12 5v14M5 12h14" />
-        </svg>
+        <Plus className="h-6 w-6 text-[#35B7C9]" strokeWidth={2} />
       </div>
       <div className="absolute bottom-[25%] right-[10%] opacity-20 pointer-events-none hidden md:block">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#F2052C" strokeWidth="2">
-          <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
-        </svg>
+        <Heart className="h-7 w-7 text-[#F2052C]" strokeWidth={2} />
       </div>
       <div className="absolute top-[40%] right-[35%] opacity-15 pointer-events-none hidden md:block">
         <div className="w-4 h-4 rounded-full border-2 border-[#35B7C9]"></div>
       </div>
       <div className="absolute bottom-[15%] left-[40%] opacity-15 pointer-events-none hidden md:block">
-        <svg width="40" height="20" viewBox="0 0 40 20" fill="none" stroke="#35B7C9" strokeWidth="2">
-          <path d="M0 10h10l5-8 5 16 5-11 3 3h12" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
+        <Activity className="w-10 h-5 text-[#35B7C9]" strokeWidth={2} />
       </div>
 
       {/* Top Header Row with Logo */}
       <div className="w-full max-w-7xl mx-auto flex justify-start items-center z-10">
-        <div className="flex items-center gap-3">
-          <div className="flex flex-col">
-            <span className="font-extrabold text-3xl tracking-tighter text-[#F2052C] leading-none">onyx</span>
-            <span className="text-[9px] font-bold text-[#14213D] uppercase tracking-[0.25em] mt-1">health plus</span>
-          </div>
-          <div className="h-9 w-9 border-2 border-[#F2052C]/30 rounded-lg flex items-center justify-center relative">
-            <div className="absolute h-5 w-1.5 bg-[#F2052C] rounded-full"></div>
-            <div className="absolute w-5 h-1.5 bg-[#F2052C] rounded-full"></div>
-            <div className="absolute w-2 h-2 rounded-full bg-[#35B7C9] -top-1 -right-1"></div>
-          </div>
-        </div>
+        <img src="/ONYXHPLOGO.png" alt="Onyx Health+" className="h-10 w-auto object-contain" />
       </div>
 
       {/* Main Content Section */}
@@ -440,9 +424,8 @@ const LoginPage = () => {
             <Card className="border-none bg-white shadow-[0_20px_60px_rgba(0,0,0,0.08)] rounded-[24px] overflow-hidden p-6 pt-10 text-center">
               
               <CardHeader className="space-y-2 p-0">
-                <div className="flex justify-center items-center gap-1.5 mb-1">
-                  <span className="font-extrabold text-[#F2052C] tracking-tighter">ONYX</span>
-                  <span className="font-extrabold text-[#35B7C9] tracking-tighter">HEALTH+</span>
+                <div className="flex justify-center items-center mb-1">
+                  <img src="/ONYXHPLOGO.png" alt="Onyx Health+" className="h-8 w-auto object-contain mx-auto" />
                 </div>
                 <CardTitle className="text-2xl font-black text-[#14213D]">Health Portal</CardTitle>
                 <CardDescription className="text-slate-500 text-sm">
@@ -619,9 +602,7 @@ const LoginPage = () => {
           <span>© 2026 ONYX HEALTH+. All rights reserved.</span>
           <span className="hidden sm:inline">|</span>
           <span className="flex items-center gap-1">
-            <svg className="h-3.5 w-3.5 fill-current" viewBox="0 0 24 24">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14h-2v-2h2v2zm0-4h-2V7h2v5z"/>
-            </svg>
+            <Shield className="h-3.5 w-3.5" />
             Secure & HIPAA Compliant
           </span>
         </div>
