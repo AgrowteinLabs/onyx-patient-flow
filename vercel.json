@@ -2,55 +2,55 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://lia-unmilked-jagger.ngrok-free.dev/api/:path*"
+      "destination": "https://api.onyxhealthplus.com/api/:path*"
     },
     {
       "source": "/create/:path*",
-      "destination": "https://lia-unmilked-jagger.ngrok-free.dev/create/:path*"
+      "destination": "https://api.onyxhealthplus.com/create/:path*"
     },
     {
       "source": "/get/:path*",
-      "destination": "https://lia-unmilked-jagger.ngrok-free.dev/get/:path*"
+      "destination": "https://api.onyxhealthplus.com/get/:path*"
     },
     {
       "source": "/view/:path*",
-      "destination": "https://lia-unmilked-jagger.ngrok-free.dev/view/:path*"
+      "destination": "https://api.onyxhealthplus.com/view/:path*"
     },
     {
       "source": "/update/:path*",
-      "destination": "https://lia-unmilked-jagger.ngrok-free.dev/update/:path*"
+      "destination": "https://api.onyxhealthplus.com/update/:path*"
     },
     {
       "source": "/delete/:path*",
-      "destination": "https://lia-unmilked-jagger.ngrok-free.dev/delete/:path*"
+      "destination": "https://api.onyxhealthplus.com/delete/:path*"
     },
     {
       "source": "/list/:path*",
-      "destination": "https://lia-unmilked-jagger.ngrok-free.dev/list/:path*"
+      "destination": "https://api.onyxhealthplus.com/list/:path*"
     },
     {
       "source": "/add/:path*",
-      "destination": "https://lia-unmilked-jagger.ngrok-free.dev/add/:path*"
+      "destination": "https://api.onyxhealthplus.com/add/:path*"
     },
     {
       "source": "/validate/:path*",
-      "destination": "https://lia-unmilked-jagger.ngrok-free.dev/validate/:path*"
+      "destination": "https://api.onyxhealthplus.com/validate/:path*"
     },
     {
       "source": "/onboard/:path*",
-      "destination": "https://lia-unmilked-jagger.ngrok-free.dev/onboard/:path*"
+      "destination": "https://api.onyxhealthplus.com/onboard/:path*"
     },
     {
       "source": "/report/:path*",
-      "destination": "https://lia-unmilked-jagger.ngrok-free.dev/report/:path*"
+      "destination": "https://api.onyxhealthplus.com/report/:path*"
     },
     {
       "source": "/sessions/:path*",
-      "destination": "https://lia-unmilked-jagger.ngrok-free.dev/sessions/:path*"
+      "destination": "https://api.onyxhealthplus.com/sessions/:path*"
     },
     {
       "source": "/session-items/:path*",
-      "destination": "https://lia-unmilked-jagger.ngrok-free.dev/session-items/:path*"
+      "destination": "https://api.onyxhealthplus.com/session-items/:path*"
     },
     {
       "source": "/((?!assets|favicon.ico|index.html|.*\\..*).*)",
