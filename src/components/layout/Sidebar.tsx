@@ -12,6 +12,7 @@ import {
   Ticket,
   Settings,
   LogOut,
+  ChevronLeft,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -105,28 +106,27 @@ const Sidebar = () => {
       )}
     >
       {/* HEADER */}
-      <div className={cn("h-20 flex items-center px-4 pt-4 relative", collapsed ? "justify-center" : "justify-between")}>
-        <div className="flex items-center gap-3 transition-all">
+      <div className={cn("h-20 flex items-center px-4 pt-4 relative justify-center")}>
+        {collapsed ? (
           <button 
             onClick={toggleCollapse}
             className="h-12 w-12 rounded-[20px] bg-white flex items-center justify-center shadow-sm shrink-0 hover:scale-105 active:scale-95 transition-all"
-            title={collapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+            title="Expand Sidebar"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-7 h-7 text-[#2d3748]">
-              <path fillRule="evenodd" d="M3 2.25a.75.75 0 000 1.5v16.5h16.5a.75.75 0 001.5 0V3.75a.75.75 0 00-.75-.75H3zM4.5 3.75v15h15v-15h-15z" clipRule="evenodd" />
-              <path d="M9.75 9a.75.75 0 000 1.5h4.5a.75.75 0 000-1.5h-4.5z" />
-            </svg>
+            <img src="/ONYXHPICON.png" alt="Onyx" className="h-10 w-auto object-contain" />
           </button>
-
-          {!collapsed && (
-            <div className="flex flex-col justify-center">
-              <h2 className="font-extrabold text-lg text-[#2d3748] tracking-tight leading-tight">Onyx Health+</h2>
-              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mt-0.5">
-                Patient Portal
-              </p>
-            </div>
-          )}
-        </div>
+        ) : (
+          <div className="flex items-center justify-between w-full px-2">
+            <img src="/ONYXHPLOGO.png" alt="Onyx Health+" className="h-11 w-auto object-contain" />
+            <button 
+              onClick={toggleCollapse}
+              className="h-9 w-9 rounded-xl bg-white flex items-center justify-center shadow-sm shrink-0 hover:scale-105 active:scale-95 transition-all text-[#2d3748]"
+              title="Collapse Sidebar"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* NAVIGATION */}
