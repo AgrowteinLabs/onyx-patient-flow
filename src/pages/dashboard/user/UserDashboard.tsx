@@ -195,7 +195,32 @@ const UserDashboard = () => {
   const upcomingAppointments = bookings.filter(b => b && b.status !== "Completed" && b.status !== "Cancelled");
   const completedConsultations = bookings.filter(b => b && b.status === "Completed");
   const reportsCount = reports.filter(Boolean).length;
-  const prescriptions: any[] = [];
+  const prescriptions = [
+    {
+      id: "rx-1",
+      medicine: "Amoxicillin 500mg",
+      dosage: "1 capsule",
+      frequency: "Three times daily",
+      duration: "7 Days",
+      doctor: "Dr. Sarah Jenkins",
+      date: "2026-06-12",
+      refillsLeft: 0,
+      notes: "Take with food. Complete the entire course even if symptoms disappear.",
+      status: "active"
+    },
+    {
+      id: "rx-2",
+      medicine: "Lisinopril 10mg",
+      dosage: "1 tablet",
+      frequency: "Once daily (Morning)",
+      duration: "30 Days",
+      doctor: "Dr. Robert Chen",
+      date: "2026-06-10",
+      refillsLeft: 2,
+      notes: "Avoid potassium supplements unless advised by doctor. Monitor blood pressure.",
+      status: "active"
+    }
+  ];
 
   return (
     <DashboardLayout>
