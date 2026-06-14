@@ -9,7 +9,7 @@ All colors MUST be HSL.
 @layer base {
   :root {
     /* Medical theme - Soft Pastel Baby Blue Background */
-    --background: 200 60% 96%;
+    --background: 200 60% 98%;
     --foreground: 215 25% 27%;
 
     --card: 0 0% 100%;
@@ -18,19 +18,19 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 215 25% 27%;
 
-    /* Primary - Medical blue/pink pastels */
-    --primary: 260 60% 65%; /* Soft purple */
+    /* Primary - Medical blue colors as requested */
+    --primary: 221 83% 53%; /* #2563EB - Royal Blue */
     --primary-foreground: 0 0% 100%;
-    --primary-light: 260 60% 75%;
+    --primary-light: 199 89% 48%; /* #0EA5E9 - Sky Blue */
     
     /* Secondary */
-    --secondary: 199 89% 85%;
-    --secondary-foreground: 215 25% 27%;
+    --secondary: 199 89% 90%;
+    --secondary-foreground: 221 83% 53%;
 
     --muted: 210 40% 96%;
     --muted-foreground: 215 16% 47%;
 
-    --accent: 340 80% 65%; /* Pink accent */
+    --accent: 199 89% 48%; /* #0EA5E9 - Sky Blue */
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
@@ -44,32 +44,32 @@ All colors MUST be HSL.
 
     --border: 214 32% 91%;
     --input: 214 32% 91%;
-    --ring: 260 60% 65%;
+    --ring: 221 83% 53%;
 
-    /* Extremely rounded corners for the pill look */
-    --radius: 1.5rem; 
+    /* 20px rounded corners as requested */
+    --radius: 20px; 
 
     /* Gradients */
-    --gradient-login-card: linear-gradient(180deg, #dfcbf7 0%, #d8b4e2 100%);
-    --gradient-login-btn: linear-gradient(90deg, #eb4e4e 0%, #b83d8a 100%);
-    --gradient-primary: linear-gradient(135deg, hsl(260 60% 65%), hsl(340 80% 65%));
+    --gradient-login-card: linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 50%, #ffffff 100%);
+    --gradient-login-btn: linear-gradient(90deg, #0ea5e9 0%, #2563eb 100%);
+    --gradient-primary: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%);
     
     /* Shadows */
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
     --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
     --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
-    --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.05);
-    --shadow-glass: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+    --shadow-card: 0 10px 30px rgba(14, 165, 233, 0.04);
+    --shadow-glass: 0 8px 32px 0 rgba(14, 165, 233, 0.06);
 
     /* Sidebar - Glassmorphism style */
     --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 215 25% 27%;
-    --sidebar-primary: 260 60% 65%;
+    --sidebar-primary: 221 83% 53%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 40% 96%;
-    --sidebar-accent-foreground: 215 25% 27%;
+    --sidebar-accent: 199 89% 95%;
+    --sidebar-accent-foreground: 221 83% 53%;
     --sidebar-border: 214 32% 91%;
-    --sidebar-ring: 260 60% 65%;
+    --sidebar-ring: 221 83% 53%;
   }
 
   .dark {
