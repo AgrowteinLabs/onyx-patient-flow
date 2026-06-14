@@ -196,7 +196,8 @@ const LoginPage = () => {
         description: "Login successful, redirecting to your dashboard...",
       });
 
-      navigate(`/dashboard/${normalizedRole}`, { replace: true });
+      const targetRole = (normalizedRole === "executive" || normalizedRole === "executive-admin") ? "user" : normalizedRole;
+      navigate(`/dashboard/${targetRole}`, { replace: true });
     } catch (error: any) {
       console.error("❌ Verification Error:", error);
       toast({

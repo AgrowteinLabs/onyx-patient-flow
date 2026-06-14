@@ -14,10 +14,6 @@ export interface VerifyResponse extends AuthResponse {
   role?: UserRole;
 }
 
-// ==================================================
-// 🟢 PATIENT (USER) AUTH — OTP only
-// ==================================================
-
 // Step 1: Send OTP
 export const userAuth = async (phone_number: string[]): Promise<AuthResponse> => {
   return apiRequest(API_ENDPOINTS.AUTH.USER_AUTH, {
@@ -28,7 +24,7 @@ export const userAuth = async (phone_number: string[]): Promise<AuthResponse> =>
       product_id: null,
     },
     requiresAuth: false,
-    withCredentials: true, // ✅ ensures any cookies are sent/stored properly
+    withCredentials: true,
   });
 };
 
@@ -44,7 +40,7 @@ export const userAuthVerify = async ({
       method: "POST",
       data: { otp },
       requiresAuth: false,
-      withCredentials: true, // ✅ critical for CORS cookies
+      withCredentials: true,
     }
   );
 
@@ -52,21 +48,9 @@ export const userAuthVerify = async ({
   return response;
 };
 
-// ==================================================
-// 🟣 NON-USER (ADMIN, DOCTOR, ETC) AUTH — OTP + PASSWORD
-// ==================================================
-
-// Step 1: Send OTP (sets cookie __signInId)
+// Step 1: Send OTP for Non-User (Admin, Doctor, etc.)
 export const signinNonUser = async (phone_number: string[]): Promise<AuthResponse> => {
   return apiRequest(API_ENDPOINTS.AUTH.SIGNIN_NON_USER, {
-    method: "POST",
-    data: { phone_number },
-    requiresAuth: false,
-    withCredentials: true,
-  });
-};
-export const resendOtp = async (phone_number: string[]): Promise<AuthResponse> => {
-  return apiRequest(API_ENDPOINTS.AUTH.RESEND_OTP, {
     method: "POST",
     data: { phone_number },
     requiresAuth: false,
@@ -100,8 +84,7 @@ export const resetPassword = async ({
   });
 };
 
-
-// Step 2: Verify OTP + Password
+// Step 2: Verify OTP + Password for Non-User
 export const verifyNonUser = async ({
   otp,
   password,
@@ -115,23 +98,12 @@ export const verifyNonUser = async ({
       method: "POST",
       data: { otp, password },
       requiresAuth: false,
-      withCredentials: true, // ✅ this sends the cookie (__signInId)
+      withCredentials: true,
     }
   );
 
   if (response.accessToken) setAuthToken(response.accessToken);
   return response;
-};
-
-// ==================================================
-// 🔁 TOKEN HANDLING
-// ==================================================
-export const issueToken = async (): Promise<AuthResponse> => {
-  return apiRequest(API_ENDPOINTS.AUTH.ISSUE_TOKEN, {
-    method: "GET",
-    requiresAuth: true,
-    withCredentials: true,
-  });
 };
 
 // Logout
@@ -141,24 +113,4 @@ export const logout = () => {
   localStorage.removeItem("userRole");
   localStorage.removeItem("userPhone");
   clearAuthToken();
-};
-
-// Optional: Refresh token (placeholder)
-export const refreshToken = async (): Promise<AuthResponse> => {
-  const refreshToken = localStorage.getItem("refreshToken");
-  if (!refreshToken) throw new Error("No refresh token available");
-
-  const response = await apiRequest<AuthResponse>("/api/auth/refresh", {
-    method: "POST",
-    data: { refreshToken },
-    requiresAuth: false,
-    withCredentials: true,
-  });
-
-  if (response.accessToken) {
-    localStorage.setItem("authToken", response.accessToken);
-    setAuthToken(response.accessToken);
-  }
-
-  return response;
 };

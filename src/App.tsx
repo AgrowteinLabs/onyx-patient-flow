@@ -60,12 +60,14 @@ const AutoRedirect = () => {
     let role = localStorage.getItem("userRole");
 
     if (token && role) {
-      role = role.replace(/_/g, "-");
+      role = role.replace(/_/g, "-").toLowerCase();
       localStorage.setItem("userRole", role);
+
+      const targetRole = (role === "executive" || role === "executive-admin") ? "user" : role;
 
       const homeRoutes = ["/", "/login", "/signup"];
       if (homeRoutes.includes(location.pathname)) {
-        navigate(`/dashboard/${role}`);
+        navigate(`/dashboard/${targetRole}`);
       }
     }
   }, [navigate, location.pathname]);
@@ -94,7 +96,7 @@ const App = () => (
           {/* =======================
               USER (PATIENT) ROUTES
           ======================== */}
-          <Route element={<ProtectedRoute allowedRoles={["user"]} />}>
+          <Route element={<ProtectedRoute allowedRoles={["user", "executive", "executive-admin"]} />}>
             <Route path="/dashboard/user" element={<UserDashboard />}>
               <Route index element={<Profile />} />
               <Route path="profile" element={<Profile />} />
