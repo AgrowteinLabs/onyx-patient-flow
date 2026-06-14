@@ -1,73 +1,65 @@
-# Welcome to your Lovable project
+# Onyx Health+ Patient Portal & Management Platform
 
-## Project info
+Welcome to the **Onyx Health+ Patient Portal**, a premium, high-fidelity healthcare portal designed to provide patients with complete control over their medical workflows. The portal is styled with a modern, glassmorphic design language using vibrant medical blue colors (`#0EA5E9` to `#2563EB`) and smooth 20px rounded corners.
 
-**URL**: https://lovable.dev/projects/8e8960fe-28c2-4bd4-ba99-708d00310bc9
+---
 
-## How can I edit this code?
+## 🚀 Key Features
 
-There are several ways of editing your application.
+- 👥 **Multi-Profile Family Management**: Seamlessly add, view, and switch between family profiles from a global topbar dropdown list. Each profile loads independent and specific medical records.
+- 📅 **Dynamic Appointment Booking**: Select healthcare professionals, look up doctor specialty/rating details, check calendar availability slots, and book real-time appointments.
+- 📋 **Integrated Support Tickets**: Raise, monitor, and resolve support tickets directly from the dashboard relative to specific appointment bookings.
+- 📄 **Diagnostic Reports & Prescriptions**: View and preview PDF lab reports, track daily prescription dosages, and monitor doctor instructions in real-time.
+- 🎥 **Virtual Video Consultations**: Join secure tele-consultations directly inside the portal, leveraging dynamic secure video tokens matched to active bookings.
+- 🔐 **HIPAA-Compliant Security**: Fully secure token workflows and data models ensuring the privacy and safety of protected health information.
 
-**Use Lovable**
+---
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/8e8960fe-28c2-4bd4-ba99-708d00310bc9) and start prompting.
+## 🛠️ Technology Stack
 
-Changes made via Lovable will be committed automatically to this repo.
+- **Framework**: [React](https://reactjs.org/) + [Vite](https://vitejs.dev/)
+- **Type Safety**: [TypeScript](https://www.typescriptlang.org/)
+- **Styling**: [Tailwind CSS](https://tailwindcss.com/) + [shadcn-ui](https://ui.shadcn.com/)
+- **Icons**: [Lucide React](https://lucide.dev/)
+- **State & Routing**: [React Router DOM](https://reactrouter.com/) + Custom Hook Providers
 
-**Use your preferred IDE**
+---
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## 📦 Getting Started
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### Prerequisites
 
-Follow these steps:
+Make sure you have [Node.js](https://nodejs.org/) (v18+) and [npm](https://www.npmjs.com/) installed on your machine.
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### Setup and Installation
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+1. **Clone the repository**:
+   ```bash
+   git clone <YOUR_GIT_URL>
+   cd onyx-patient-flow
+   ```
 
-# Step 3: Install the necessary dependencies.
-npm i
+2. **Install dependencies**:
+   ```bash
+   npm install
+   ```
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+3. **Configure Environment Variables**:
+   Create a `.env` file in the root directory and add the backend API URL:
+   ```env
+   VITE_BACKEND_URL=https://api.onyxhealthplus.com
+   ```
+
+4. **Run the development server**:
+   ```bash
+   npm run dev
+   ```
+   Open `http://localhost:8080` in your browser to view the application.
+
+### Build and Deployment
+
+To build the production-ready bundle, run:
+```bash
+npm run build
 ```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/8e8960fe-28c2-4bd4-ba99-708d00310bc9) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+The static files will be generated in the `dist/` directory, ready to be served by any hosting provider.

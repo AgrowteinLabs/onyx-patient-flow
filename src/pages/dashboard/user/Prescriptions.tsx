@@ -4,10 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
   Pill, 
-  Calendar, 
   Download, 
-  User, 
-  Clock, 
   AlertCircle,
   FileCheck
 } from "lucide-react";
@@ -30,7 +27,44 @@ const Prescriptions = () => {
   const { toast } = useToast();
   
   // Mock data representing items from session items
-  const [prescriptions] = useState<Prescription[]>([]);
+  const [prescriptions] = useState<Prescription[]>([
+    {
+      id: "rx-1",
+      medicineName: "Amoxicillin 500mg",
+      dosage: "1 capsule",
+      frequency: "Three times daily",
+      duration: "7 Days",
+      prescribedBy: "Dr. Sarah Jenkins",
+      date: "2026-06-12",
+      refillsLeft: 0,
+      notes: "Take with food. Complete the entire course even if symptoms disappear.",
+      status: "active"
+    },
+    {
+      id: "rx-2",
+      medicineName: "Lisinopril 10mg",
+      dosage: "1 tablet",
+      frequency: "Once daily (Morning)",
+      duration: "30 Days",
+      prescribedBy: "Dr. Robert Chen",
+      date: "2026-06-10",
+      refillsLeft: 2,
+      notes: "Avoid potassium supplements unless advised by doctor. Monitor blood pressure.",
+      status: "active"
+    },
+    {
+      id: "rx-3",
+      medicineName: "Metformin 850mg",
+      dosage: "1 tablet",
+      frequency: "Twice daily with meals",
+      duration: "90 Days",
+      prescribedBy: "Dr. Sarah Jenkins",
+      date: "2026-03-15",
+      refillsLeft: 1,
+      notes: "Take with breakfast and dinner. Stay well hydrated.",
+      status: "completed"
+    }
+  ]);
 
   const handleDownload = (p: Prescription) => {
     toast({
