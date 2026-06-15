@@ -61,6 +61,7 @@ const Appointments = () => {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleDoctorChange = async (doctorId: string) => {
@@ -110,14 +111,75 @@ const Appointments = () => {
       }
 
       // 2. Confirm Booking
-      await confirmBooking(bookingId);
+      const razorpayOrderId = response.order?.id || response.booking?.razorpayOrderId || response.booking?.paymentOrderId || response.razorpayOrderId;
+      
+      if (razorpayOrderId && (window as any).Razorpay) {
+        const userDetails = { name: "", email: "", contact: "" };
+        try {
+          const userStr = localStorage.getItem("user");
+          if (userStr) {
+            const u = JSON.parse(userStr);
+            userDetails.name = u.name || "";
+            userDetails.email = u.email || "";
+            userDetails.contact = u.phone || u.contact || "";
+          }
+        } catch (e) {
+          console.error("Failed to parse user details from localStorage:", e);
+        }
 
-      toast({
-        title: "Appointment Booked!",
-        description: "Your appointment has been successfully scheduled and confirmed."
-      });
-      setOpenBookModal(false);
-      loadData();
+        const options = {
+          key: response.razorpayKey || response.key || "rzp_test_mockKeyId",
+          amount: response.order?.amount || response.booking?.amount || 50000,
+          currency: response.order?.currency || "INR",
+          name: "ONYX Healthcare",
+          description: "Doctor Consultation Fee",
+          order_id: razorpayOrderId,
+          handler: async function (paymentRes: any) {
+            try {
+              setBookingLoading(true);
+              await confirmBooking(
+                bookingId,
+                paymentRes.razorpay_payment_id,
+                paymentRes.razorpay_order_id,
+                paymentRes.razorpay_signature
+              );
+              toast({
+                title: "Appointment Booked!",
+                description: "Your appointment has been successfully scheduled and confirmed."
+              });
+              setOpenBookModal(false);
+              loadData();
+            } catch (confirmErr: any) {
+              console.error(confirmErr);
+              toast({ title: confirmErr.message || "Failed to confirm payment on backend", variant: "destructive" });
+            } finally {
+              setBookingLoading(false);
+            }
+          },
+          prefill: userDetails,
+          theme: {
+            color: "#2563eb",
+          },
+          modal: {
+            ondismiss: function () {
+              toast({ title: "Payment cancelled by user.", variant: "destructive" });
+              setBookingLoading(false);
+            }
+          }
+        };
+        
+        const rzp = new (window as any).Razorpay(options);
+        rzp.open();
+      } else {
+        // Fallback for mock environment
+        await confirmBooking(bookingId);
+        toast({
+          title: "Appointment Booked!",
+          description: "Your appointment has been successfully scheduled and confirmed (Mock Mode)."
+        });
+        setOpenBookModal(false);
+        loadData();
+      }
     } catch (err: any) {
       console.error(err);
       toast({ title: err.message || "Failed to book appointment", variant: "destructive" });

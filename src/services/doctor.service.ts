@@ -18,7 +18,10 @@ export const listDoctors = async (): Promise<Doctor[]> => {
   return res.doctors || res.data || (Array.isArray(res) ? res : []);
 };
 
-export const getDoctorAvailability = async (doctorId: string): Promise<string[]> => {
-  const res: any = await apiRequest(API_ENDPOINTS.DOCTOR.AVAILABILITY(doctorId), { method: "GET" });
+export const getDoctorAvailability = async (doctorId: string, date?: string): Promise<string[]> => {
+  const d = new Date();
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const queryDate = date || `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const res: any = await apiRequest(`/api/doctor/availability?doctorId=${doctorId}&date=${queryDate}`, { method: "GET" });
   return res.availability || res.slots || (Array.isArray(res) ? res : []);
 };

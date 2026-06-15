@@ -51,6 +51,7 @@ const Doctors = () => {
 
   useEffect(() => {
     loadDoctorsList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Filter & Search Logic
@@ -105,19 +106,85 @@ const Doctors = () => {
       const profileId = localStorage.getItem("selectedProfileId") || undefined;
       const docId = bookingDoctor._id || bookingDoctor.id || "";
 
+      // 1. Create Booking
       const response = await createBooking(docId, selectedSlot, profileId);
       const bookingId = response.booking?._id || response.booking?.id || response._id || response.id;
       
-      await confirmBooking(bookingId);
+      if (!bookingId) {
+        throw new Error("Failed to get booking reference.");
+      }
 
-      toast({
-        title: "Visit Confirmed!",
-        description: `Your appointment with ${bookingDoctor.name} is successfully scheduled.`
-      });
-      setOpenBookModal(false);
-    } catch (err) {
+      // 2. Confirm Booking
+      const razorpayOrderId = response.order?.id || response.booking?.razorpayOrderId || response.booking?.paymentOrderId || response.razorpayOrderId;
+
+      if (razorpayOrderId && (window as any).Razorpay) {
+        const userDetails = { name: "", email: "", contact: "" };
+        try {
+          const userStr = localStorage.getItem("user");
+          if (userStr) {
+            const u = JSON.parse(userStr);
+            userDetails.name = u.name || "";
+            userDetails.email = u.email || "";
+            userDetails.contact = u.phone || u.contact || "";
+          }
+        } catch (e) {
+          console.error("Failed to parse user details from localStorage:", e);
+        }
+
+        const options = {
+          key: response.razorpayKey || response.key || "rzp_test_mockKeyId",
+          amount: response.order?.amount || response.booking?.amount || 50000,
+          currency: response.order?.currency || "INR",
+          name: "ONYX Healthcare",
+          description: "Doctor Consultation Fee",
+          order_id: razorpayOrderId,
+          handler: async function (paymentRes: any) {
+            try {
+              setBookingLoading(true);
+              await confirmBooking(
+                bookingId,
+                paymentRes.razorpay_payment_id,
+                paymentRes.razorpay_order_id,
+                paymentRes.razorpay_signature
+              );
+              toast({
+                title: "Visit Confirmed!",
+                description: `Your appointment with ${bookingDoctor.name} is successfully scheduled.`
+              });
+              setOpenBookModal(false);
+            } catch (confirmErr: any) {
+              console.error(confirmErr);
+              toast({ title: confirmErr.message || "Failed to confirm payment on backend", variant: "destructive" });
+            } finally {
+              setBookingLoading(false);
+            }
+          },
+          prefill: userDetails,
+          theme: {
+            color: "#2563eb",
+          },
+          modal: {
+            ondismiss: function () {
+              toast({ title: "Payment cancelled by user.", variant: "destructive" });
+              setBookingLoading(false);
+            }
+          }
+        };
+
+        const rzp = new (window as any).Razorpay(options);
+        rzp.open();
+      } else {
+        // Fallback for mock environment
+        await confirmBooking(bookingId);
+        toast({
+          title: "Visit Confirmed!",
+          description: `Your appointment with ${bookingDoctor.name} is successfully scheduled (Mock Mode).`
+        });
+        setOpenBookModal(false);
+      }
+    } catch (err: any) {
       console.error(err);
-      toast({ title: "Failed to confirm appointment", variant: "destructive" });
+      toast({ title: err.message || "Failed to confirm appointment", variant: "destructive" });
     } finally {
       setBookingLoading(false);
     }
