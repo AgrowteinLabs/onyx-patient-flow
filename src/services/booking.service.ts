@@ -75,3 +75,7 @@ export const listBookings = async (): Promise<Booking[]> => {
   });
   return res.bookings || res.data || (Array.isArray(res) ? res : []);
 };
+
+export const getPrescription = async (bookingId: string): Promise<any> => {
+  return apiRequest(`/api/prescription/${bookingId}`, { method: "GET" });
+};

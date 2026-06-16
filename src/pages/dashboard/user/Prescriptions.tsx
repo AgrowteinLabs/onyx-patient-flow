@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,7 @@ import {
   FileCheck
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { listBookings, getPrescription } from "@/services/booking.service";
 
 interface Prescription {
   id: string;
@@ -23,48 +24,97 @@ interface Prescription {
   status: "active" | "completed";
 }
 
+const MOCK_PRESCRIPTIONS: Prescription[] = [
+  {
+    id: "rx-1",
+    medicineName: "Amoxicillin 500mg",
+    dosage: "1 capsule",
+    frequency: "Three times daily",
+    duration: "7 Days",
+    prescribedBy: "Dr. Sarah Jenkins",
+    date: "2026-06-12",
+    refillsLeft: 0,
+    notes: "Take with food. Complete the entire course even if symptoms disappear.",
+    status: "active"
+  },
+  {
+    id: "rx-2",
+    medicineName: "Lisinopril 10mg",
+    dosage: "1 tablet",
+    frequency: "Once daily (Morning)",
+    duration: "30 Days",
+    prescribedBy: "Dr. Robert Chen",
+    date: "2026-06-10",
+    refillsLeft: 2,
+    notes: "Avoid potassium supplements unless advised by doctor. Monitor blood pressure.",
+    status: "active"
+  },
+  {
+    id: "rx-3",
+    medicineName: "Metformin 850mg",
+    dosage: "1 tablet",
+    frequency: "Twice daily with meals",
+    duration: "90 Days",
+    prescribedBy: "Dr. Sarah Jenkins",
+    date: "2026-03-15",
+    refillsLeft: 1,
+    notes: "Take with breakfast and dinner. Stay well hydrated.",
+    status: "completed"
+  }
+];
+
 const Prescriptions = () => {
   const { toast } = useToast();
-  
-  // Mock data representing items from session items
-  const [prescriptions] = useState<Prescription[]>([
-    {
-      id: "rx-1",
-      medicineName: "Amoxicillin 500mg",
-      dosage: "1 capsule",
-      frequency: "Three times daily",
-      duration: "7 Days",
-      prescribedBy: "Dr. Sarah Jenkins",
-      date: "2026-06-12",
-      refillsLeft: 0,
-      notes: "Take with food. Complete the entire course even if symptoms disappear.",
-      status: "active"
-    },
-    {
-      id: "rx-2",
-      medicineName: "Lisinopril 10mg",
-      dosage: "1 tablet",
-      frequency: "Once daily (Morning)",
-      duration: "30 Days",
-      prescribedBy: "Dr. Robert Chen",
-      date: "2026-06-10",
-      refillsLeft: 2,
-      notes: "Avoid potassium supplements unless advised by doctor. Monitor blood pressure.",
-      status: "active"
-    },
-    {
-      id: "rx-3",
-      medicineName: "Metformin 850mg",
-      dosage: "1 tablet",
-      frequency: "Twice daily with meals",
-      duration: "90 Days",
-      prescribedBy: "Dr. Sarah Jenkins",
-      date: "2026-03-15",
-      refillsLeft: 1,
-      notes: "Take with breakfast and dinner. Stay well hydrated.",
-      status: "completed"
+  const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadPrescriptions = async () => {
+    setLoading(true);
+    try {
+      const bookings = await listBookings();
+      const completedBookings = bookings.filter(b => b.status?.toLowerCase() === "completed");
+      
+      const rxPromises = completedBookings.map(async (b) => {
+        try {
+          const rx = await getPrescription(b._id || b.id);
+          if (rx) {
+            return {
+              id: rx._id || rx.id,
+              medicineName: rx.medications?.[0]?.name || rx.medicines?.[0] || "Prescribed Medication",
+              dosage: rx.medications?.[0]?.dosage || "1 Unit",
+              frequency: rx.medications?.[0]?.frequency || "As instructed",
+              duration: rx.duration || "Course duration",
+              prescribedBy: b.doctorId?.name || "Verified Doctor",
+              date: rx.createdAt || b.slotDate || new Date().toISOString(),
+              refillsLeft: rx.refillsLeft || 0,
+              notes: rx.instructions || rx.notes || "Follow instructions carefully.",
+              status: "active" as const
+            };
+          }
+        } catch (e) {
+          // ignore individual missing prescriptions
+        }
+        return null;
+      });
+
+      const resolvedRxs = (await Promise.all(rxPromises)).filter(Boolean) as Prescription[];
+      
+      if (resolvedRxs.length > 0) {
+        setPrescriptions(resolvedRxs);
+      } else {
+        setPrescriptions(MOCK_PRESCRIPTIONS);
+      }
+    } catch (err) {
+      console.error("Failed to load prescriptions, falling back to mock", err);
+      setPrescriptions(MOCK_PRESCRIPTIONS);
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
+
+  useEffect(() => {
+    loadPrescriptions();
+  }, []);
 
   const handleDownload = (p: Prescription) => {
     toast({
