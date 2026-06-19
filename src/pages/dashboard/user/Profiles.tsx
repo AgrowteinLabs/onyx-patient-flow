@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { getProfiles, createProfile, updateProfile, deleteProfile, Profile } from "@/services/profile.service";
 import { listSessions } from "@/services/session.service";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,9 +14,15 @@ import {
   Trash2, 
   User, 
   UserCheck,
-  CheckCircle
+  CheckCircle,
+  Shield,
+  ShieldAlert,
+  Eye
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { AbdmFlowDialog } from "@/components/abdm/AbdmFlowDialog";
+import { AbdmCardDialog } from "@/components/abdm/AbdmCardDialog";
+import { unlinkAbha } from "@/services/abdm.service";
 
 const Profiles = () => {
   const { toast } = useToast();
@@ -30,6 +36,12 @@ const Profiles = () => {
   const [openDialog, setOpenDialog] = useState(false);
   const [dialogMode, setDialogMode] = useState<"create" | "edit">("create");
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+
+  // ABDM States
+  const [abdmFlowOpen, setAbdmFlowOpen] = useState(false);
+  const [abdmCardOpen, setAbdmCardOpen] = useState(false);
+  const [abdmProfileId, setAbdmProfileId] = useState<string | null>(null);
+  const [abdmProfileName, setAbdmProfileName] = useState("");
 
   // Form fields
   const [name, setName] = useState("");
@@ -57,7 +69,7 @@ const Profiles = () => {
     }
   }, [height, weight]);
 
-  const loadProfiles = async () => {
+  const loadProfiles = useCallback(async () => {
     try {
       setLoading(true);
       const list = await getProfiles();
@@ -68,11 +80,25 @@ const Profiles = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     loadProfiles();
-  }, []);
+  }, [loadProfiles]);
+
+  const handleUnlinkAbha = async (profileId: string) => {
+    if (!window.confirm("Are you sure you want to remove this ABHA link? This only unlinks it from Onyx; your national ABHA account will remain active.")) {
+      return;
+    }
+    try {
+      await unlinkAbha(profileId);
+      toast({ title: "ABHA unlinked successfully" });
+      loadProfiles();
+    } catch (err) {
+      console.error(err);
+      toast({ title: "Failed to unlink ABHA", variant: "destructive" });
+    }
+  };
 
   const handleOpenCreate = () => {
     setDialogMode("create");
@@ -317,6 +343,116 @@ const Profiles = () => {
                     </div>
                   )}
 
+                  {/* ABHA / ABDM Section */}
+                  <div className="pt-3 border-t border-slate-100 space-y-2">
+                    {(!p.abhaStatus || p.abhaStatus === "NONE") && (
+                      <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <Shield className="h-4 w-4 text-slate-400" />
+                          <span className="text-[11px] font-bold text-slate-600">ABHA Health ID</span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-[10px] font-extrabold text-[#2563eb] hover:text-[#2563eb]/95 hover:bg-[#2563eb]/5 rounded-lg px-2.5"
+                          onClick={() => {
+                            setAbdmProfileId(id);
+                            setAbdmProfileName(p.name);
+                            setAbdmFlowOpen(true);
+                          }}
+                        >
+                          Link ABHA
+                        </Button>
+                      </div>
+                    )}
+
+                    {p.abhaStatus === "LINKED" && (
+                      <div className="p-3 rounded-xl bg-emerald-50/20 border border-emerald-100/50 space-y-2 text-left">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-emerald-700 font-extrabold text-[10px] uppercase tracking-wide">
+                            <Shield className="h-3.5 w-3.5" />
+                            <span>ABHA Linked</span>
+                          </div>
+                          <Badge className="bg-emerald-500/10 text-emerald-600 border-none font-bold text-[8px] px-1.5 py-0.5">
+                            Verified
+                          </Badge>
+                        </div>
+                        <div className="text-[11px] space-y-0.5">
+                          <div className="flex justify-between text-slate-500 font-medium">
+                            <span>Number:</span>
+                            <span className="font-bold text-slate-800 tracking-wider">{p.abhaNumber}</span>
+                          </div>
+                          <div className="flex justify-between text-slate-500 font-medium">
+                            <span>Address:</span>
+                            <span className="font-bold text-slate-800 lowercase">{p.abhaAddress}</span>
+                          </div>
+                        </div>
+                        <div className="flex gap-2 pt-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 h-7 text-[10px] font-extrabold rounded-lg border-slate-200 text-slate-600 hover:bg-slate-50"
+                            onClick={() => {
+                              setAbdmProfileId(id);
+                              setAbdmProfileName(p.name);
+                              setAbdmCardOpen(true);
+                            }}
+                          >
+                            <Eye className="h-3 w-3 mr-1" /> View Card
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 size-7 p-0 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-100"
+                            onClick={() => handleUnlinkAbha(id)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {p.abhaStatus === "DEACTIVATED" && (
+                      <div className="p-3 rounded-xl bg-rose-50/20 border border-rose-100/50 space-y-2 text-left">
+                        <div className="flex items-center gap-1.5 text-rose-700 font-extrabold text-[10px] uppercase tracking-wide">
+                          <ShieldAlert className="h-3.5 w-3.5" />
+                          <span>ABHA Deactivated</span>
+                        </div>
+                        <p className="text-[9px] text-rose-600 leading-normal font-medium bg-rose-50/80 p-1.5 rounded-lg border border-rose-100/30">
+                          Deactivated nationally. Please reactivate via your government portal.
+                        </p>
+                        <div className="text-[11px] space-y-0.5">
+                          <div className="flex justify-between text-slate-500 font-medium">
+                            <span>Number:</span>
+                            <span className="font-bold text-slate-800 tracking-wider">{p.abhaNumber}</span>
+                          </div>
+                        </div>
+                        <div className="flex gap-2 pt-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 h-7 text-[10px] font-extrabold rounded-lg border-slate-200 text-slate-600 hover:bg-slate-50"
+                            onClick={() => {
+                              setAbdmProfileId(id);
+                              setAbdmProfileName(p.name);
+                              setAbdmCardOpen(true);
+                            }}
+                          >
+                            <Eye className="h-3 w-3 mr-1" /> View Card
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 size-7 p-0 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-100"
+                            onClick={() => handleUnlinkAbha(id)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   {/* CTA switches profile */}
                   {!isSelected ? (
                     <Button 
@@ -475,6 +611,26 @@ const Profiles = () => {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* ABDM Flows */}
+      {abdmProfileId && (
+        <>
+          <AbdmFlowDialog
+            isOpen={abdmFlowOpen}
+            onOpenChange={setAbdmFlowOpen}
+            profileId={abdmProfileId}
+            profileName={abdmProfileName}
+            onSuccess={loadProfiles}
+          />
+          <AbdmCardDialog
+            isOpen={abdmCardOpen}
+            onOpenChange={setAbdmCardOpen}
+            profileId={abdmProfileId}
+            profileName={abdmProfileName}
+            onSuccess={loadProfiles}
+          />
+        </>
+      )}
 
     </div>
   );
