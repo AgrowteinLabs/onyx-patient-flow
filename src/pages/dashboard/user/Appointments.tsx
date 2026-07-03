@@ -112,8 +112,11 @@ const Appointments = () => {
 
       // 2. Confirm Booking
       const razorpayOrderId = response.order?.id || response.booking?.razorpayOrderId || response.booking?.paymentOrderId || response.razorpayOrderId;
+      const rzpKey = response.razorpayKey || response.key || "rzp_test_mockKeyId";
+      const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+      const isLiveKey = rzpKey.startsWith("rzp_live");
       
-      if (razorpayOrderId && (window as any).Razorpay) {
+      if (razorpayOrderId && (window as any).Razorpay && (!isLocalhost || !isLiveKey)) {
         const userDetails = { name: "", email: "", contact: "" };
         try {
           const userStr = localStorage.getItem("user");
@@ -128,7 +131,7 @@ const Appointments = () => {
         }
 
         const options = {
-          key: response.razorpayKey || response.key || "rzp_test_mockKeyId",
+          key: rzpKey,
           amount: response.order?.amount || response.booking?.amount || 50000,
           currency: response.order?.currency || "INR",
           name: "ONYX Healthcare",
@@ -171,11 +174,14 @@ const Appointments = () => {
         const rzp = new (window as any).Razorpay(options);
         rzp.open();
       } else {
-        // Fallback for mock environment
+        // Fallback for mock environment or localhost live key restriction
+        if (isLocalhost && isLiveKey) {
+          console.warn("⚠️ Live Razorpay key detected on localhost. Simulating payment confirmation for local development.");
+        }
         await confirmBooking(bookingId);
         toast({
           title: "Appointment Booked!",
-          description: "Your appointment has been successfully scheduled and confirmed (Mock Mode)."
+          description: "Your appointment has been successfully scheduled and confirmed (Local Fallback)."
         });
         setOpenBookModal(false);
         loadData();

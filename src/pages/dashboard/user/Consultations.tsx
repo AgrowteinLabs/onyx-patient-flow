@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   Tv
 } from "lucide-react";
+import AgoraRTC, { IAgoraRTCClient, ICameraVideoTrack, IMicrophoneAudioTrack } from "agora-rtc-sdk-ng";
 
 const Consultations = () => {
   const { toast } = useToast();
@@ -35,6 +36,16 @@ const Consultations = () => {
   const [videoToken, setVideoToken] = useState("");
   const [micActive, setMicActive] = useState(true);
   const [cameraActive, setCameraActive] = useState(true);
+
+  // Agora states & refs
+  const clientRef = useRef<IAgoraRTCClient | null>(null);
+  const localAudioRef = useRef<IMicrophoneAudioTrack | null>(null);
+  const localVideoRef = useRef<ICameraVideoTrack | null>(null);
+  const [remoteUserConnected, setRemoteUserConnected] = useState(false);
+  const [remoteVideoTrackActive, setRemoteVideoTrackActive] = useState(false);
+  const [isRealCall, setIsRealCall] = useState(false);
+  const [callDuration, setCallDuration] = useState(0);
+  const durationTimerRef = useRef<any>(null);
 
   // Consultation Detail Modal
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
@@ -79,25 +90,203 @@ const Consultations = () => {
 
   useEffect(() => {
     loadData();
+    return () => {
+      // Cleanup video call on unmount
+      if (durationTimerRef.current) clearInterval(durationTimerRef.current);
+      if (localAudioRef.current) localAudioRef.current.close();
+      if (localVideoRef.current) localVideoRef.current.close();
+      if (clientRef.current) clientRef.current.leave();
+    };
   }, []);
+
+  const formatTime = (secs: number) => {
+    const m = Math.floor(secs / 60).toString().padStart(2, "0");
+    const s = (secs % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
+  };
+
+  const startSimulatedCall = () => {
+    setIsRealCall(false);
+    setRemoteUserConnected(true);
+    setRemoteVideoTrackActive(true);
+    toast({ title: "Connected to secure telehealth server (Simulated)" });
+
+    setCallDuration(0);
+    durationTimerRef.current = setInterval(() => {
+      setCallDuration((prev) => prev + 1);
+    }, 1000);
+  };
+
+  const startAgoraCall = async (appId: string, channelName: string, token: string) => {
+    try {
+      setIsRealCall(true);
+      setRemoteUserConnected(false);
+      setRemoteVideoTrackActive(false);
+
+      const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+      clientRef.current = client;
+
+      client.on("user-published", async (user: any, mediaType: "video" | "audio") => {
+        await client.subscribe(user, mediaType);
+        setRemoteUserConnected(true);
+        if (mediaType === "video") {
+          setRemoteVideoTrackActive(true);
+          setTimeout(() => {
+            user.videoTrack?.play("remote-video");
+          }, 300);
+        }
+        if (mediaType === "audio") {
+          user.audioTrack?.play();
+        }
+      });
+
+      client.on("user-unpublished", (user: any, mediaType: "video" | "audio") => {
+        if (mediaType === "video") {
+          setRemoteVideoTrackActive(false);
+        }
+      });
+
+      client.on("user-left", () => {
+        setRemoteUserConnected(false);
+        setRemoteVideoTrackActive(false);
+        toast({ title: "Doctor has left the call" });
+      });
+
+      const rtcToken = token.startsWith("mock-") ? null : token;
+      const uid = Math.floor(Math.random() * 1000000);
+      await client.join(appId, channelName, rtcToken, uid);
+
+      try {
+        const localAudio = await AgoraRTC.createMicrophoneAudioTrack();
+        const localVideo = await AgoraRTC.createCameraVideoTrack();
+        localAudioRef.current = localAudio;
+        localVideoRef.current = localVideo;
+
+        await client.publish([localAudio, localVideo]);
+        
+        localVideo.play("local-video");
+
+        if (!micActive) {
+          await localAudio.setEnabled(false);
+        }
+        if (!cameraActive) {
+          await localVideo.setEnabled(false);
+        }
+
+        toast({ title: "Connected to telehealth call" });
+      } catch (mediaErr) {
+        console.warn("Media devices permission denied or failed:", mediaErr);
+        toast({
+          title: "Audio/Video permission error",
+          description: "Could not access camera or microphone. Operating in receive-only mode.",
+          variant: "destructive"
+        });
+      }
+
+      setCallDuration(0);
+      durationTimerRef.current = setInterval(() => {
+        setCallDuration((prev) => prev + 1);
+      }, 1000);
+
+    } catch (err) {
+      console.error("Agora join failed:", err);
+      toast({
+        title: "Agora Connection Failed",
+        description: "Failed to connect to Agora. Switching to simulation mode.",
+        variant: "destructive"
+      });
+      startSimulatedCall();
+    }
+  };
 
   const handleJoinCall = async () => {
     try {
       const targetBookingId = nextBooking?._id || nextBooking?.id || "mock-booking-id-123";
-      const res: any = await apiRequest(`/api/video/token/${targetBookingId}`, { method: "GET" })
-        .catch(() => ({ token: "mock-agora-video-jwt-token-xyz" }));
+      toast({ title: "Requesting video room access..." });
       
-      setVideoToken(res.token || "mock-token-xyz");
+      const res: any = await apiRequest(`/api/video/token/${targetBookingId}`, { method: "GET" })
+        .catch(() => ({ 
+          token: "mock-agora-video-jwt-token-xyz",
+          channelName: `room-${targetBookingId}`,
+          appId: import.meta.env.VITE_AGORA_APP_ID || "mock-app-id"
+        }));
+      
+      const token = res.token || "mock-token-xyz";
+      const channelName = res.channelName || `room-${targetBookingId}`;
+      const appId = res.appId || import.meta.env.VITE_AGORA_APP_ID;
+
+      setVideoToken(token);
       setInVideoCall(true);
-      toast({ title: "Connecting to secure telehealth server..." });
+
+      if (appId && appId !== "mock-app-id") {
+        startAgoraCall(appId, channelName, token);
+      } else {
+        startSimulatedCall();
+      }
     } catch (err) {
       console.error(err);
+      startSimulatedCall();
     }
   };
 
-  const handleEndCall = () => {
+  const handleEndCall = async () => {
+    if (durationTimerRef.current) {
+      clearInterval(durationTimerRef.current);
+      durationTimerRef.current = null;
+    }
+
+    if (localAudioRef.current) {
+      localAudioRef.current.close();
+      localAudioRef.current = null;
+    }
+    if (localVideoRef.current) {
+      localVideoRef.current.close();
+      localVideoRef.current = null;
+    }
+
+    if (clientRef.current) {
+      try {
+        await clientRef.current.leave();
+      } catch (err) {
+        console.error("Error leaving Agora client:", err);
+      }
+      clientRef.current = null;
+    }
+
     setInVideoCall(false);
+    setRemoteUserConnected(false);
+    setRemoteVideoTrackActive(false);
+    setIsRealCall(false);
     toast({ title: "Consultation ended successfully" });
+  };
+
+  const toggleMic = async () => {
+    const nextState = !micActive;
+    setMicActive(nextState);
+    if (localAudioRef.current) {
+      try {
+        await localAudioRef.current.setEnabled(nextState);
+      } catch (err) {
+        console.error("Error toggling microphone:", err);
+      }
+    }
+  };
+
+  const toggleCamera = async () => {
+    const nextState = !cameraActive;
+    setCameraActive(nextState);
+    if (localVideoRef.current) {
+      try {
+        await localVideoRef.current.setEnabled(nextState);
+        if (nextState) {
+          setTimeout(() => {
+            localVideoRef.current?.play("local-video");
+          }, 100);
+        }
+      } catch (err) {
+        console.error("Error toggling camera:", err);
+      }
+    }
   };
 
   return (
@@ -128,28 +317,41 @@ const Consultations = () => {
             <Card className="bg-slate-900 text-white border-none rounded-[20px] overflow-hidden shadow-2xl relative min-h-[420px] flex flex-col justify-between">
               
               {/* Doctor Video Feed (Big background) */}
-              <div className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center">
-                <div className="text-center space-y-2">
-                  <div className="h-24 w-24 rounded-full bg-slate-800 border-2 border-slate-700/80 flex items-center justify-center text-slate-300 font-extrabold text-2xl animate-pulse">
-                    DR
+              <div id="remote-video" className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center overflow-hidden">
+                {(!remoteVideoTrackActive || !isRealCall) && (
+                  <div className="text-center space-y-2 z-10">
+                    <div className="h-24 w-24 rounded-full bg-slate-800 border-2 border-slate-700/80 flex items-center justify-center text-slate-300 font-extrabold text-2xl animate-pulse">
+                      DR
+                    </div>
+                    <h3 className="font-extrabold text-sm">{nextBooking?.doctorId?.name || "Dr. Sarah Jenkins"}</h3>
+                    <Badge className="bg-emerald-500 text-white text-[9px] font-bold border-none">
+                      {remoteUserConnected ? "Doctor is connected" : "Waiting for doctor..."}
+                    </Badge>
                   </div>
-                  <h3 className="font-extrabold text-sm">Dr. Sarah Jenkins</h3>
-                  <Badge className="bg-emerald-500 text-white text-[9px] font-bold border-none">Doctor is connected</Badge>
-                </div>
+                )}
+                {!isRealCall && remoteUserConnected && (
+                  <div className="absolute bottom-4 left-4 z-10 bg-black/60 px-3 py-1 rounded-md text-[10px] font-semibold text-emerald-400">
+                    Simulated Video Stream
+                  </div>
+                )}
               </div>
 
               {/* Patient Video Feed (Floating Pip window) */}
-              {cameraActive ? (
-                <div className="absolute bottom-20 right-4 h-32 w-24 rounded-xl border border-slate-700/80 bg-slate-800 overflow-hidden shadow-md">
-                  <div className="h-full w-full flex items-center justify-center text-xs font-bold text-slate-400 bg-slate-950 uppercase">
-                    You
+              <div 
+                id="local-video" 
+                className="absolute bottom-20 right-4 h-32 w-24 rounded-xl border border-slate-700/80 bg-slate-800 overflow-hidden shadow-md z-10 flex items-center justify-center"
+              >
+                {!cameraActive && (
+                  <div className="absolute inset-0 bg-slate-900 flex items-center justify-center z-20">
+                    <VideoOff className="h-6 w-6 text-slate-600" />
                   </div>
-                </div>
-              ) : (
-                <div className="absolute bottom-20 right-4 h-32 w-24 rounded-xl border border-slate-700/80 bg-slate-900 flex items-center justify-center shadow-md">
-                  <VideoOff className="h-6 w-6 text-slate-600" />
-                </div>
-              )}
+                )}
+                {cameraActive && !isRealCall && (
+                  <div className="absolute inset-0 bg-slate-950 flex items-center justify-center text-[10px] font-bold text-slate-400 uppercase z-20">
+                    You (Mock)
+                  </div>
+                )}
+              </div>
 
               {/* Header Status overlay */}
               <div className="p-4 z-10 bg-gradient-to-b from-black/80 to-transparent flex items-center justify-between">
@@ -158,7 +360,7 @@ const Consultations = () => {
                   <span className="text-xs font-bold uppercase tracking-wider text-rose-400">Live Consultation</span>
                 </div>
                 <div className="text-xs font-bold bg-white/10 px-3 py-1 rounded-full border border-white/5">
-                  03:14
+                  {formatTime(callDuration)}
                 </div>
               </div>
 
@@ -166,7 +368,7 @@ const Consultations = () => {
               <div className="p-5 z-10 bg-gradient-to-t from-black/80 to-transparent flex items-center justify-center gap-4">
                 {/* Mute Mic */}
                 <Button 
-                  onClick={() => setMicActive(!micActive)}
+                  onClick={toggleMic}
                   variant="outline" 
                   size="icon" 
                   className={`h-11 w-11 rounded-full border-none shadow-md ${
@@ -186,7 +388,7 @@ const Consultations = () => {
 
                 {/* Toggle Camera */}
                 <Button 
-                  onClick={() => setCameraActive(!cameraActive)}
+                  onClick={toggleCamera}
                   variant="outline" 
                   size="icon" 
                   className={`h-11 w-11 rounded-full border-none shadow-md ${
