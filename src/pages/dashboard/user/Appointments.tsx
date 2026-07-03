@@ -20,6 +20,31 @@ import {
   MapPin
 } from "lucide-react";
 
+const loadRazorpayScript = () => {
+  return new Promise((resolve) => {
+    if ((window as any).Razorpay) {
+      resolve(true);
+      return;
+    }
+    const existingScript = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
+    if (existingScript) {
+      existingScript.addEventListener("load", () => resolve(true));
+      existingScript.addEventListener("error", () => resolve(false));
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => {
+      resolve(true);
+    };
+    script.onerror = () => {
+      resolve(false);
+    };
+    document.body.appendChild(script);
+  });
+};
+
 const Appointments = () => {
   const { toast } = useToast();
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -99,11 +124,17 @@ const Appointments = () => {
 
     try {
       setBookingLoading(true);
+      await loadRazorpayScript();
       const docId = selectedDoctor._id || selectedDoctor.id || "";
       const profileId = selectedProfileId || undefined;
 
       // 1. Create Booking
       const response = await createBooking(docId, selectedSlot, profileId);
+      
+      if (response.error || !response.booking) {
+        throw new Error(response.error?.description || response.error?.message || "Failed to initiate booking. The doctor's settlement account may not be active.");
+      }
+      
       const bookingId = response.booking?._id || response.booking?.id || response._id || response.id;
 
       if (!bookingId) {
@@ -111,7 +142,7 @@ const Appointments = () => {
       }
 
       // 2. Confirm Booking
-      const razorpayOrderId = response.order?.id || response.booking?.razorpayOrderId || response.booking?.paymentOrderId || response.razorpayOrderId;
+      const razorpayOrderId = response.razorpayOrderId || response.order?.id || response.booking?.razorpayOrderId;
       const rzpKey = response.razorpayKey || response.key || "rzp_test_mockKeyId";
       const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
       const isLiveKey = rzpKey.startsWith("rzp_live");
