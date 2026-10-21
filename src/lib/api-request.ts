@@ -21,6 +21,7 @@ export const clearAuthToken = (): void => {
   localStorage.removeItem("refreshToken");
   localStorage.removeItem("userRole");
   localStorage.removeItem("userEmail");
+  localStorage.removeItem("apiBaseUrl");
 };
 
 /* =========================================================
@@ -91,8 +92,10 @@ export const apiRequest = async <T = any>(
   const { requiresAuth = true, headers = {}, ...restConfig } = config;
   const token = getAuthToken();
 
+  const activeBaseUrl = restConfig.baseURL || localStorage.getItem("apiBaseUrl") || API_BASE_URL;
+
   const requestConfig: AxiosRequestConfig = {
-    baseURL: API_BASE_URL,
+    baseURL: activeBaseUrl,
     url: endpoint,
     method: restConfig.method || "GET",
     data: restConfig.data || {},
@@ -109,7 +112,7 @@ export const apiRequest = async <T = any>(
 
   /* ----------------------- 🧭 LOG OUTGOING ----------------------- */
   console.groupCollapsed(
-    `%c🌍 [API REQUEST] ${requestConfig.method?.toUpperCase()} ${API_BASE_URL}${endpoint}`,
+    `%c🌍 [API REQUEST] ${requestConfig.method?.toUpperCase()} ${activeBaseUrl}${endpoint}`,
     "color:#0070f3;font-weight:bold;"
   );
   console.log("Headers:", requestConfig.headers);

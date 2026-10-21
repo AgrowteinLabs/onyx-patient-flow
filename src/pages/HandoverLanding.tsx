@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Loader2, Stethoscope, AlertCircle, ArrowRight, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,10 +9,16 @@ export default function HandoverLanding() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
+  const executedRef = useRef(false);
 
   const ticket = searchParams.get("ticket");
+  const envParam = searchParams.get("env");
 
   useEffect(() => {
+    // Guard against React StrictMode double-execution
+    if (executedRef.current) return;
+    executedRef.current = true;
+
     async function executeHandover() {
       if (!ticket) {
         setError("Invalid or missing session ticket. Please initiate consultation from your mobile app.");
@@ -20,7 +26,7 @@ export default function HandoverLanding() {
       }
 
       try {
-        const data = await consumeHandshakeTicket(ticket);
+        const data = await consumeHandshakeTicket(ticket, envParam);
 
         if (data && (data.status === "success" || data.token || data.accessToken)) {
           const token = data.token || data.accessToken;
@@ -76,7 +82,7 @@ export default function HandoverLanding() {
     }
 
     executeHandover();
-  }, [ticket, navigate]);
+  }, [ticket, envParam, navigate]);
 
   if (error) {
     return (
