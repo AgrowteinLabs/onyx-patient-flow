@@ -96,6 +96,7 @@ const Consultations = () => {
   const p2pRetryTimerRef = useRef<any>(null);
   const remoteUserConnectedRef = useRef(false);
   const handleJoinCallRef = useRef<any>(null);
+  const handleConsultationCompletedRef = useRef<any>(null);
 
   // Agora states & refs
   const clientRef = useRef<IAgoraRTCClient | null>(null);
@@ -376,9 +377,10 @@ const Consultations = () => {
           } catch (err) {
             console.debug("Error adding ICE candidate on patient:", err);
           }
-        } else if (data.type === "call-ended") {
+        } else if (data.type === "call-ended" || data.type === "consultation-completed" || data.action === "consultation-completed") {
           setRemoteUserConnected(false);
           setRemoteVideoTrackActive(false);
+          handleConsultationCompletedRef.current?.(data.bookingId);
         }
       };
 
@@ -437,6 +439,16 @@ const Consultations = () => {
       });
       peerJSRef.current = peer;
 
+      // Listen for data signals (e.g. consultation-completed) from doctor
+      peer.on("connection", (conn: any) => {
+        conn.on("data", (data: any) => {
+          console.log("[Telehealth P2P] Received data signal from doctor:", data);
+          if (data?.type === "consultation-completed" || data?.action === "consultation-completed") {
+            handleConsultationCompletedRef.current?.(data.bookingId);
+          }
+        });
+      });
+
       peer.on("call", (mediaCall: any) => {
         console.log(`[Telehealth P2P] Incoming call from ${mediaCall.peer}. Answering with local stream...`);
         if (localStream) {
@@ -447,6 +459,10 @@ const Consultations = () => {
         mediaCall.on("stream", (remoteStream: MediaStream) => {
           console.log("[Telehealth P2P] Remote video stream received via PeerJS answer on patient!");
           attachRemoteStream(remoteStream);
+        });
+        mediaCall.on("close", () => {
+          console.log("[Telehealth P2P] Incoming media call closed by doctor");
+          handleConsultationCompletedRef.current?.();
         });
       });
 
@@ -462,6 +478,10 @@ const Consultations = () => {
                 mediaCall.on("stream", (remoteStream: MediaStream) => {
                   console.log("[Telehealth P2P] Remote stream received from outgoing call on patient!");
                   attachRemoteStream(remoteStream);
+                });
+                mediaCall.on("close", () => {
+                  console.log("[Telehealth P2P] Outgoing media call closed by doctor");
+                  handleConsultationCompletedRef.current?.();
                 });
               }
             }
@@ -545,7 +565,7 @@ const Consultations = () => {
       client.on("user-left", () => {
         setRemoteUserConnected(false);
         setRemoteVideoTrackActive(false);
-        toast({ title: "Doctor has left the call" });
+        handleConsultationCompletedRef.current?.();
       });
 
       const rtcToken = (token && !token.toLowerCase().includes("mock") && token.length > 30) ? token : null;
@@ -1038,6 +1058,56 @@ const Consultations = () => {
     setIsRealCall(false);
     toast({ title: "Consultation ended successfully" });
   };
+
+  const handleConsultationCompleted = (completedBookingId?: string) => {
+    console.log("[Telehealth] Consultation marked completed by doctor:", completedBookingId);
+
+    // Stop local media and close video dialog
+    handleEndCall();
+
+    const targetId = completedBookingId || nextBooking?._id || nextBooking?.id || paramBookingId;
+    if (targetId) {
+      setBookings((prev) => prev.filter((b) => (b._id !== targetId && b.id !== targetId)));
+      setNextBooking((prev) => {
+        if (prev && (prev._id === targetId || prev.id === targetId)) {
+          return null;
+        }
+        return prev;
+      });
+    }
+
+    // Refresh data from server to pull updated past consultations and any prescriptions
+    loadData();
+
+    toast({
+      title: "Consultation Completed",
+      description: "Your doctor has concluded this consultation session. Your medical records and summaries are updated.",
+    });
+  };
+  handleConsultationCompletedRef.current = handleConsultationCompleted;
+
+  // Real-time polling while in-call: if doctor completes booking on backend, exit immediately
+  useEffect(() => {
+    if (!inVideoCall) return;
+
+    const currentBookingId = nextBooking?._id || nextBooking?.id || paramBookingId;
+    if (!currentBookingId) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await listBookings().catch(() => null);
+        const bList = Array.isArray(res) ? res : res?.bookings || res?.data || [];
+        const current = bList.find((b: any) => b && (b._id === currentBookingId || b.id === currentBookingId));
+        if (current && (current.status?.toLowerCase() === "completed" || current.status?.toLowerCase() === "attended")) {
+          console.log("[Telehealth] Booking detected as completed via backend poll:", currentBookingId);
+          clearInterval(pollInterval);
+          handleConsultationCompletedRef.current?.(currentBookingId);
+        }
+      } catch { /* ignore */ }
+    }, 3000);
+
+    return () => clearInterval(pollInterval);
+  }, [inVideoCall, nextBooking, paramBookingId]);
 
   const toggleMic = async () => {
     const nextState = !micActive;
