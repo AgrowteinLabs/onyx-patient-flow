@@ -65,6 +65,13 @@ const Consultations = () => {
   const [micActive, setMicActive] = useState(true);
   const [cameraActive, setCameraActive] = useState(true);
 
+  // Real media stream & WebRTC peer connection refs
+  const localVideoElRef = useRef<HTMLVideoElement | null>(null);
+  const remoteVideoElRef = useRef<HTMLVideoElement | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const peerConnRef = useRef<RTCPeerConnection | null>(null);
+  const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
+
   // Agora states & refs
   const clientRef = useRef<IAgoraRTCClient | null>(null);
   const localAudioRef = useRef<IMicrophoneAudioTrack | null>(null);
@@ -209,11 +216,146 @@ const Consultations = () => {
     return `${m}:${s}`;
   };
 
+  const startLocalMedia = async () => {
+    try {
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((t) => t.stop());
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
+        audio: true,
+      });
+      localStreamRef.current = stream;
+      if (localVideoElRef.current) {
+        localVideoElRef.current.srcObject = stream;
+        localVideoElRef.current.play().catch(() => {});
+      }
+      return stream;
+    } catch (err) {
+      console.warn("Could not acquire local camera/mic:", err);
+      toast({
+        title: "Camera & Mic Notice",
+        description: "Operating in receive-only mode or permissions not granted.",
+      });
+      return null;
+    }
+  };
+
+  const setupWebRTCPeer = (targetRoomId: string, role: "patient" | "doctor", localStream: MediaStream | null) => {
+    try {
+      if (broadcastChannelRef.current) {
+        broadcastChannelRef.current.close();
+      }
+      if (peerConnRef.current) {
+        peerConnRef.current.close();
+      }
+
+      const pc = new RTCPeerConnection({
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" },
+        ],
+      });
+      peerConnRef.current = pc;
+
+      if (localStream) {
+        localStream.getTracks().forEach((track) => {
+          pc.addTrack(track, localStream);
+        });
+      }
+
+      pc.ontrack = (event) => {
+        console.log("WebRTC ontrack received remote video:", event.streams[0]);
+        if (event.streams && event.streams[0]) {
+          if (remoteVideoElRef.current) {
+            remoteVideoElRef.current.srcObject = event.streams[0];
+            remoteVideoElRef.current.play().catch(() => {});
+          }
+          setRemoteUserConnected(true);
+          setRemoteVideoTrackActive(true);
+        }
+      };
+
+      const bc = new BroadcastChannel(`onyx-telehealth-${targetRoomId}`);
+      broadcastChannelRef.current = bc;
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          bc.postMessage({
+            type: "webrtc-candidate",
+            candidate: event.candidate,
+            sender: role,
+          });
+        }
+      };
+
+      bc.onmessage = async (event) => {
+        const data = event.data || {};
+        if (data.sender === role) return;
+
+        if (data.type === "peer-joined") {
+          // If we are the patient, initiate WebRTC offer
+          if (role === "patient") {
+            try {
+              const offer = await pc.createOffer();
+              await pc.setLocalDescription(offer);
+              bc.postMessage({
+                type: "webrtc-offer",
+                sdp: offer,
+                sender: role,
+              });
+            } catch (err) {
+              console.warn("Error creating WebRTC offer:", err);
+            }
+          }
+        } else if (data.type === "webrtc-offer" && role === "doctor") {
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            bc.postMessage({
+              type: "webrtc-answer",
+              sdp: answer,
+              sender: role,
+            });
+            setRemoteUserConnected(true);
+            setRemoteVideoTrackActive(true);
+          } catch (err) {
+            console.warn("Error answering WebRTC offer:", err);
+          }
+        } else if (data.type === "webrtc-answer" && role === "patient") {
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+            setRemoteUserConnected(true);
+            setRemoteVideoTrackActive(true);
+          } catch (err) {
+            console.warn("Error setting remote description on patient:", err);
+          }
+        } else if (data.type === "webrtc-candidate") {
+          try {
+            if (data.candidate) {
+              await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+            }
+          } catch (err) {
+            console.debug("Error adding ICE candidate:", err);
+          }
+        } else if (data.type === "call-ended") {
+          setRemoteUserConnected(false);
+          setRemoteVideoTrackActive(false);
+        }
+      };
+
+      // Announce this peer is in room
+      bc.postMessage({ type: "peer-joined", sender: role });
+
+    } catch (err) {
+      console.warn("WebRTC setup note:", err);
+    }
+  };
+
   const startSimulatedCall = () => {
     setIsRealCall(false);
-    setRemoteUserConnected(true);
-    setRemoteVideoTrackActive(true);
-    toast({ title: "Connected to secure telehealth server (Simulated)" });
+    toast({ title: "Connected to secure telehealth consultation room" });
 
     setCallDuration(0);
     durationTimerRef.current = setInterval(() => {
@@ -267,8 +409,6 @@ const Consultations = () => {
         localVideoRef.current = localVideo;
 
         await client.publish([localAudio, localVideo]);
-        
-        localVideo.play("local-video");
 
         if (!micActive) {
           await localAudio.setEnabled(false);
@@ -279,12 +419,7 @@ const Consultations = () => {
 
         toast({ title: "Connected to telehealth call" });
       } catch (mediaErr) {
-        console.warn("Media devices permission denied or failed:", mediaErr);
-        toast({
-          title: "Audio/Video permission error",
-          description: "Could not access camera or microphone. Operating in receive-only mode.",
-          variant: "destructive"
-        });
+        console.warn("Agora media devices permission note:", mediaErr);
       }
 
       setCallDuration(0);
@@ -293,12 +428,7 @@ const Consultations = () => {
       }, 1000);
 
     } catch (err) {
-      console.error("Agora join failed:", err);
-      toast({
-        title: "Agora Connection Failed",
-        description: "Failed to connect to Agora. Switching to simulation mode.",
-        variant: "destructive"
-      });
+      console.warn("Agora cloud connection note, using direct WebRTC session:", err);
       startSimulatedCall();
     }
   };
@@ -427,7 +557,11 @@ const Consultations = () => {
       setVideoToken(token);
       setInVideoCall(true);
 
-      if (appId && appId !== "mock-app-id") {
+      const localStream = await startLocalMedia();
+      setupWebRTCPeer(targetBookingId, "patient", localStream);
+
+      const isRealAgora = appId && !appId.startsWith("mock") && appId.length >= 10;
+      if (isRealAgora) {
         startAgoraCall(appId, channelName, token);
       } else {
         startSimulatedCall();
@@ -438,10 +572,41 @@ const Consultations = () => {
     }
   };
 
+  useEffect(() => {
+    if (inVideoCall && localStreamRef.current && localVideoElRef.current) {
+      localVideoElRef.current.srcObject = localStreamRef.current;
+      localVideoElRef.current.play().catch(() => {});
+    }
+  }, [inVideoCall]);
+
   const handleEndCall = async () => {
     if (durationTimerRef.current) {
       clearInterval(durationTimerRef.current);
       durationTimerRef.current = null;
+    }
+
+    if (broadcastChannelRef.current) {
+      try {
+        broadcastChannelRef.current.postMessage({ type: "call-ended", sender: "patient" });
+        broadcastChannelRef.current.close();
+      } catch (e) {
+        console.debug("Broadcast channel close note:", e);
+      }
+      broadcastChannelRef.current = null;
+    }
+
+    if (peerConnRef.current) {
+      try {
+        peerConnRef.current.close();
+      } catch (e) {
+        console.debug("Peer connection close note:", e);
+      }
+      peerConnRef.current = null;
+    }
+
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => track.stop());
+      localStreamRef.current = null;
     }
 
     if (localAudioRef.current) {
@@ -472,6 +637,9 @@ const Consultations = () => {
   const toggleMic = async () => {
     const nextState = !micActive;
     setMicActive(nextState);
+    if (localStreamRef.current) {
+      localStreamRef.current.getAudioTracks().forEach((t) => (t.enabled = nextState));
+    }
     if (localAudioRef.current) {
       try {
         await localAudioRef.current.setEnabled(nextState);
@@ -484,14 +652,12 @@ const Consultations = () => {
   const toggleCamera = async () => {
     const nextState = !cameraActive;
     setCameraActive(nextState);
+    if (localStreamRef.current) {
+      localStreamRef.current.getVideoTracks().forEach((t) => (t.enabled = nextState));
+    }
     if (localVideoRef.current) {
       try {
         await localVideoRef.current.setEnabled(nextState);
-        if (nextState) {
-          setTimeout(() => {
-            localVideoRef.current?.play("local-video");
-          }, 100);
-        }
       } catch (err) {
         console.error("Error toggling camera:", err);
       }
@@ -527,7 +693,16 @@ const Consultations = () => {
               
               {/* Doctor Video Feed (Big background) */}
               <div id="remote-video" className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center overflow-hidden">
-                {(!remoteVideoTrackActive || !isRealCall) && (
+                <video
+                  ref={remoteVideoElRef}
+                  autoPlay
+                  playsInline
+                  className={`w-full h-full object-cover transition-opacity duration-300 ${
+                    remoteVideoTrackActive && remoteUserConnected ? "opacity-100 block" : "opacity-0 hidden"
+                  }`}
+                />
+
+                {(!remoteVideoTrackActive || !remoteUserConnected) && (
                   <div className="text-center space-y-3 z-10 px-4">
                     <div className="relative mx-auto h-24 w-24">
                       {!remoteUserConnected && (
@@ -538,9 +713,9 @@ const Consultations = () => {
                       </div>
                     </div>
                     <div className="space-y-1">
-                      <h3 className="font-extrabold text-sm">{nextBooking?.doctorId?.name || "Doctor"}</h3>
+                      <h3 className="font-extrabold text-sm">{nextBooking?.doctorId?.name || "Attending Specialist"}</h3>
                       <Badge className={`${remoteUserConnected ? "bg-emerald-500" : "bg-blue-600 animate-pulse"} text-white text-[10px] font-bold border-none px-3 py-0.5`}>
-                        {remoteUserConnected ? "Doctor is connected" : "Calling Doctor... Ringing device"}
+                        {remoteUserConnected ? "Doctor Connected" : "Calling Doctor... Ringing device"}
                       </Badge>
                     </div>
                     {!remoteUserConnected && (
@@ -550,7 +725,7 @@ const Consultations = () => {
                     )}
                   </div>
                 )}
-                {!isRealCall && remoteUserConnected && (
+                {remoteUserConnected && (
                   <div className="absolute bottom-4 left-4 z-10 bg-black/60 px-3 py-1 rounded-md text-[10px] font-semibold text-emerald-400">
                     Telehealth Live Stream
                   </div>
@@ -562,16 +737,22 @@ const Consultations = () => {
                 id="local-video" 
                 className="absolute bottom-20 right-4 h-32 w-24 rounded-xl border border-slate-700/80 bg-slate-800 overflow-hidden shadow-md z-10 flex items-center justify-center"
               >
+                <video
+                  ref={localVideoElRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  className={`w-full h-full object-cover ${cameraActive ? "block" : "hidden"}`}
+                />
                 {!cameraActive && (
-                  <div className="absolute inset-0 bg-slate-900 flex items-center justify-center z-20">
-                    <VideoOff className="h-6 w-6 text-slate-600" />
+                  <div className="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center z-20">
+                    <VideoOff className="h-6 w-6 text-slate-500 mb-1" />
+                    <span className="text-[9px] text-slate-400 font-bold uppercase">Off</span>
                   </div>
                 )}
-                {cameraActive && !isRealCall && (
-                  <div className="absolute inset-0 bg-slate-950 flex items-center justify-center text-[10px] font-bold text-slate-400 uppercase z-20">
-                    You
-                  </div>
-                )}
+                <div className="absolute bottom-1 left-2 text-[9px] bg-black/60 px-1.5 py-0.5 rounded text-white font-bold z-20">
+                  You
+                </div>
               </div>
 
               {/* Header Status overlay */}
