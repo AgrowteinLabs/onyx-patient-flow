@@ -316,6 +316,33 @@ const Doctors = () => {
         name: "Onyx Health Plus",
         description: "Doctor Consultation Booking",
         order_id: razorpayOrderId,
+        config: {
+          display: {
+            blocks: {
+              qr_block: {
+                name: "Scan & Pay via UPI QR",
+                instruments: [
+                  {
+                    method: "upi",
+                    flows: ["qr"],
+                  },
+                ],
+              },
+              other_block: {
+                name: "Other Payment Modes",
+                instruments: [
+                  { method: "upi", flows: ["intent", "collect"] },
+                  { method: "card" },
+                  { method: "netbanking" },
+                ],
+              },
+            },
+            sequence: ["block.qr_block", "block.other_block"],
+            preferences: {
+              show_default_blocks: true,
+            },
+          },
+        },
         handler: async function (paymentRes: any) {
           console.log("[Booking Flow] Razorpay payment successful callback received. Payment ID:", paymentRes.razorpay_payment_id, "Order ID:", paymentRes.razorpay_order_id);
           try {
@@ -343,6 +370,7 @@ const Doctors = () => {
         prefill: {
           contact: userDetails.contact,
           email: userDetails.email,
+          method: "upi",
         },
         theme: {
           color: "#0D9488",

@@ -651,6 +651,33 @@ const Consultations = () => {
           name: "Onyx Health Plus",
           description: `Instant Consultation with Dr. ${instantDoctor.name}`,
           order_id: razorpayOrderId,
+          config: {
+            display: {
+              blocks: {
+                qr_block: {
+                  name: "Scan & Pay via UPI QR",
+                  instruments: [
+                    {
+                      method: "upi",
+                      flows: ["qr"],
+                    },
+                  ],
+                },
+                other_block: {
+                  name: "Other Payment Modes",
+                  instruments: [
+                    { method: "upi", flows: ["intent", "collect"] },
+                    { method: "card" },
+                    { method: "netbanking" },
+                  ],
+                },
+              },
+              sequence: ["block.qr_block", "block.other_block"],
+              preferences: {
+                show_default_blocks: true,
+              },
+            },
+          },
           handler: async function (paymentRes: any) {
             console.log("[Instant Consultation Flow] Payment succeeded:", paymentRes);
             try {
@@ -695,6 +722,7 @@ const Consultations = () => {
           prefill: {
             contact: userDetails.contact,
             email: userDetails.email,
+            method: "upi",
           },
           theme: {
             color: "#0D9488",
@@ -704,8 +732,8 @@ const Consultations = () => {
               console.log("[Instant Consultation Flow] Checkout dismissed by user.");
               toast({ title: "Consultation payment cancelled", variant: "destructive" });
               setInstantCallStarting(false);
-            }
-          }
+            },
+          },
         };
 
         const rzp = new (window as any).Razorpay(options);
