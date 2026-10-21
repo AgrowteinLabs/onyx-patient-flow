@@ -132,7 +132,8 @@ export const apiRequest = async <T = any>(
   } catch (error: any) {
     if (axios.isAxiosError(error)) {
       const status = error.response?.status;
-      const message = error.response?.data?.message || error.message;
+      const data = error.response?.data;
+      const message = (typeof data?.error === "string" ? data.error : null) || data?.message || error.message;
 
       console.groupCollapsed(
         `%c❌ [API ERROR] ${requestConfig.method?.toUpperCase()} ${endpoint}`,
@@ -140,6 +141,7 @@ export const apiRequest = async <T = any>(
       );
       console.log("Status:", status);
       console.log("Message:", message);
+      console.log("Response Data:", data);
       console.groupEnd();
 
       /* 401 Handling → refresh token flow */

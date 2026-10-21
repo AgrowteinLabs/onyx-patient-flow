@@ -8,6 +8,9 @@ import {
   BrowserRouter,
   Routes,
   Route,
+  Navigate,
+  useParams,
+  useSearchParams,
   useNavigate,
   useLocation,
 } from "react-router-dom";
@@ -18,6 +21,7 @@ import {
 import Index from "./pages/Index";
 import LoginPage from "./components/auth/LoginPage";
 import NotFound from "./pages/NotFound";
+import HandoverLanding from "./pages/HandoverLanding";
 
 /* =======================
    Dashboards (Layouts)
@@ -80,6 +84,19 @@ const AutoRedirect = () => {
 };
 
 /* ===============================
+   Seamless Handover Route Aliases
+=============================== */
+const ConsultationRoomRedirect = () => {
+  const { bookingId } = useParams();
+  return <Navigate to={`/dashboard/user/consultations?bookingId=${bookingId || ""}&autoJoin=true`} replace />;
+};
+
+const ConsultationSelectDoctorRedirect = () => {
+  const [searchParams] = useSearchParams();
+  return <Navigate to={`/dashboard/user/appointments?${searchParams.toString()}`} replace />;
+};
+
+/* ===============================
    MAIN APP
 =============================== */
 const App = () => (
@@ -96,6 +113,9 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<LoginPage />} />
+          <Route path="/handover" element={<HandoverLanding />} />
+          <Route path="/consultation/room/:bookingId" element={<ConsultationRoomRedirect />} />
+          <Route path="/consultation/select-doctor" element={<ConsultationSelectDoctorRedirect />} />
 
           {/* =======================
               USER (PATIENT) ROUTES
