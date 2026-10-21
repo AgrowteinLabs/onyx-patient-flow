@@ -29,6 +29,7 @@ const Consultations = () => {
   const [searchParams] = useSearchParams();
   const paramBookingId = searchParams.get("bookingId");
   const autoJoin = searchParams.get("autoJoin") === "true";
+  const paramReportId = searchParams.get("reportId") || localStorage.getItem("currentReportId");
   const { toast } = useToast();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -89,7 +90,7 @@ const Consultations = () => {
       const activeBooking = matchedBooking || (upcoming.length > 0 ? upcoming[0] : null);
       setNextBooking(activeBooking);
 
-      if (autoJoin && activeBooking) {
+      if (autoJoin) {
         setTimeout(() => {
           handleJoinCall(activeBooking);
         }, 500);
@@ -216,8 +217,8 @@ const Consultations = () => {
   const handleJoinCall = async (bookingOverride?: Booking | null) => {
     try {
       const b = bookingOverride || nextBooking;
-      const targetBookingId = b?._id || b?.id || paramBookingId || "mock-booking-id-123";
-      toast({ title: "Requesting video room access..." });
+      const targetBookingId = b?._id || b?.id || paramBookingId || (paramReportId ? `report-${paramReportId}` : "instant-telehealth-session");
+      toast({ title: "Connecting to telehealth consultation room..." });
       
       const res: any = await apiRequest(`/api/video/token/${targetBookingId}`, { method: "GET" })
         .catch(() => ({ 
@@ -453,6 +454,11 @@ const Consultations = () => {
                       </span>
                     </span>
                   </div>
+                ) : paramReportId ? (
+                  <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 bg-emerald-50 p-3.5 rounded-xl border border-emerald-200 max-w-sm">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                    <span>Screening Report Linked (#{paramReportId.slice(-6)}). Telehealth room ready.</span>
+                  </div>
                 ) : (
                   <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 bg-slate-50 p-3.5 rounded-xl border border-slate-100 max-w-sm">
                     <Clock className="h-4 w-4 text-[#2563eb]" />
@@ -465,7 +471,7 @@ const Consultations = () => {
                 <Button 
                   onClick={() => handleJoinCall()}
                   className="bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] hover:opacity-95 text-white font-bold rounded-xl shadow-md h-11 px-6 text-xs"
-                  disabled={!nextBooking}
+                  disabled={!nextBooking && !paramReportId}
                 >
                   <Video className="h-4 w-4 mr-2" /> Start Video Consultation
                 </Button>
