@@ -35,6 +35,7 @@ export interface CreateBookingSlotParams {
   reportSharing?: ReportSharingConfig;
   shareMedicalHistory?: boolean;
   selectedReportIds?: string[];
+  reportId?: string;
 }
 
 export const createBooking = async (
@@ -93,6 +94,9 @@ export const createBooking = async (
       if (slotOrDetails.selectedReportIds) {
         data.selectedReportIds = slotOrDetails.selectedReportIds;
       }
+    }
+    if (slotOrDetails.reportId) {
+      data.reportId = slotOrDetails.reportId;
     }
   }
 
