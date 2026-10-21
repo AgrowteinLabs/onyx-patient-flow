@@ -17,11 +17,24 @@ export interface Booking {
   [key: string]: any;
 }
 
+export interface ReportSharingConfig {
+  scope: "all" | "selected" | "none";
+  selectedReportIds?: string[];
+  patientConsent?: {
+    granted: boolean;
+    purpose: string;
+  };
+}
+
 export interface CreateBookingSlotParams {
   slotDate: string;
   slotTimeStart: string;
   slotTimeEnd: string;
   profileId?: string;
+  type?: "instant" | "scheduled";
+  reportSharing?: ReportSharingConfig;
+  shareMedicalHistory?: boolean;
+  selectedReportIds?: string[];
 }
 
 export const createBooking = async (
@@ -56,7 +69,7 @@ export const createBooking = async (
 
   const data: any = {
     doctorId,
-    type: 'scheduled',
+    type: (typeof slotOrDetails === 'object' && slotOrDetails.type) ? slotOrDetails.type : 'scheduled',
     slotDate,
     slotTimeStart,
     slotTimeEnd,
@@ -64,6 +77,23 @@ export const createBooking = async (
 
   if (targetProfileId) {
     data.profileId = targetProfileId;
+  }
+
+  if (typeof slotOrDetails === 'object' && slotOrDetails !== null) {
+    if (slotOrDetails.reportSharing) {
+      data.reportSharing = slotOrDetails.reportSharing;
+      data.shareMedicalHistory = slotOrDetails.reportSharing.scope === "all";
+      if (slotOrDetails.reportSharing.selectedReportIds) {
+        data.selectedReportIds = slotOrDetails.reportSharing.selectedReportIds;
+      }
+    } else {
+      if (slotOrDetails.shareMedicalHistory !== undefined) {
+        data.shareMedicalHistory = slotOrDetails.shareMedicalHistory;
+      }
+      if (slotOrDetails.selectedReportIds) {
+        data.selectedReportIds = slotOrDetails.selectedReportIds;
+      }
+    }
   }
 
   return apiRequest(API_ENDPOINTS.BOOKING.CREATE, {
@@ -109,4 +139,20 @@ export const listBookings = async (): Promise<Booking[]> => {
 
 export const getPrescription = async (bookingId: string): Promise<any> => {
   return apiRequest(`/api/prescription/${bookingId}`, { method: "GET" });
+};
+
+export const getSharedReports = async (bookingId: string): Promise<any> => {
+  return apiRequest(API_ENDPOINTS.BOOKING.SHARED_REPORTS(bookingId), {
+    method: 'GET',
+  });
+};
+
+export const agreeReportAccess = async (bookingId: string, declaration?: string): Promise<any> => {
+  return apiRequest(API_ENDPOINTS.BOOKING.AGREE_REPORT_ACCESS(bookingId), {
+    method: 'POST',
+    data: {
+      agreed: true,
+      declaration: declaration || "In accordance with NMC/ABDM Telemedicine Practice Guidelines and patient privacy regulations, I declare that I will access and use this patient's medical records strictly for the purpose of this clinical consultation. I agree to keep all patient health information confidential."
+    }
+  });
 };

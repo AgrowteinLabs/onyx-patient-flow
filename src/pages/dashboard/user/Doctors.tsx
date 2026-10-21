@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { listDoctors, getDoctorAvailability, Doctor, DoctorSlot } from "@/services/doctor.service";
 import { createBooking, confirmBooking } from "@/services/booking.service";
+import { listReportsByProfile } from "@/services/report.service";
 import { 
   Stethoscope, 
   Star, 
@@ -22,7 +23,9 @@ import {
   Sun,
   Sunset,
   RefreshCcw,
-  ChevronRight
+  ChevronRight,
+  FileText,
+  Lock
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
@@ -72,6 +75,12 @@ const Doctors = () => {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [openBookModal, setOpenBookModal] = useState(false);
+
+  // Report Sharing & Consent (ABDM & NMC Telemedicine Practice Guidelines)
+  const [availableReports, setAvailableReports] = useState<any[]>([]);
+  const [reportSharingScope, setReportSharingScope] = useState<"all" | "selected" | "none">("all");
+  const [selectedReportIds, setSelectedReportIds] = useState<string[]>([]);
+  const [patientConsentGranted, setPatientConsentGranted] = useState(true);
 
   // Upcoming 7 days calendar generator
   const upcomingDates = useMemo(() => {
@@ -124,6 +133,13 @@ const Doctors = () => {
       const list = await listDoctors();
       setDoctors(list || []);
       setFilteredDoctors(list || []);
+
+      const storedProfileId = localStorage.getItem("selectedProfileId");
+      if (storedProfileId) {
+        listReportsByProfile(storedProfileId).then((reps) => {
+          setAvailableReports(Array.isArray(reps) ? reps : []);
+        }).catch(() => {});
+      }
     } catch (err) {
       console.error(err);
       toast({ title: "Failed to fetch doctors list", variant: "destructive" });
@@ -229,13 +245,26 @@ const Doctors = () => {
       await loadRazorpayScript();
       console.log("[Booking Flow] SDK Loaded. window.Razorpay available:", !!(window as any).Razorpay);
 
-      // 1. Create Booking
-      console.log("[Booking Flow] Calling createBooking API...");
+      // 1. Create Booking with ABDM / NMC Report Sharing Consent
+      console.log("[Booking Flow] Calling createBooking API with reportSharing consent...");
+      const reportSharingPayload = {
+        scope: reportSharingScope,
+        selectedReportIds: reportSharingScope === "selected" ? selectedReportIds : [],
+        patientConsent: {
+          granted: reportSharingScope !== "none" ? patientConsentGranted : false,
+          purpose: "Telehealth Consultation & Clinical Evaluation"
+        }
+      };
+
       const response = await createBooking(docId, {
         slotDate: selectedDate,
         slotTimeStart: selectedSlot.startTime,
         slotTimeEnd: selectedSlot.endTime,
         profileId,
+        type: "scheduled",
+        reportSharing: reportSharingPayload,
+        shareMedicalHistory: reportSharingScope === "all",
+        selectedReportIds: reportSharingScope === "selected" ? selectedReportIds : [],
       }, profileId);
       console.log("[Booking Flow] createBooking API Response received:", response);
       
@@ -647,6 +676,163 @@ const Doctors = () => {
               )}
             </div>
 
+            {/* 3. Medical History & Report Sharing (Consent & Doctor Agreement - ABDM/NMC) */}
+            {bookingDoctor && (
+              <div className="space-y-3 pt-3 border-t border-slate-100">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                  <Label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <FileText className="h-3.5 w-3.5 text-[#2563eb]" /> Medical History & Report Sharing *
+                  </Label>
+                  <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[8.5px] px-2 py-0.5 w-fit">
+                    ABDM & NMC Telemedicine Compliant
+                  </Badge>
+                </div>
+
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Adhering to the Ayushman Bharat Digital Mission (ABDM) consent architecture and NMC Telemedicine Practice Guidelines, configure how your diagnostic records should be shared with <span className="font-semibold text-slate-800">Dr. {bookingDoctor.name}</span> for this visit.
+                </p>
+
+                {/* Scope Selection Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {/* Option 1: All Reports */}
+                  <div
+                    onClick={() => setReportSharingScope("all")}
+                    className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                      reportSharingScope === "all"
+                        ? "bg-blue-50/70 border-[#2563eb] ring-2 ring-[#2563eb]/20 shadow-xs"
+                        : "bg-white border-slate-200 hover:border-blue-300 hover:bg-slate-50/60"
+                    }`}
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className={`text-xs font-extrabold ${reportSharingScope === "all" ? "text-[#2563eb]" : "text-slate-800"}`}>
+                          Share Full History
+                        </span>
+                        <Badge className="bg-emerald-100 text-emerald-800 text-[8px] font-bold border-none px-1 py-0">
+                          Recommended
+                        </Badge>
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-normal">
+                        Grants complete access to past test reports & medical history for clinical evaluation.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Option 2: Selected Reports */}
+                  <div
+                    onClick={() => setReportSharingScope("selected")}
+                    className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                      reportSharingScope === "selected"
+                        ? "bg-blue-50/70 border-[#2563eb] ring-2 ring-[#2563eb]/20 shadow-xs"
+                        : "bg-white border-slate-200 hover:border-blue-300 hover:bg-slate-50/60"
+                    }`}
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className={`text-xs font-extrabold ${reportSharingScope === "selected" ? "text-[#2563eb]" : "text-slate-800"}`}>
+                          Select Reports
+                        </span>
+                        {selectedReportIds.length > 0 && (
+                          <Badge className="bg-[#2563eb] text-white text-[8px] font-bold border-none px-1.5 py-0">
+                            {selectedReportIds.length} picked
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-normal">
+                        Pick only specific diagnostic reports you want the doctor to evaluate.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Option 3: Do Not Share */}
+                  <div
+                    onClick={() => setReportSharingScope("none")}
+                    className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                      reportSharingScope === "none"
+                        ? "bg-blue-50/70 border-[#2563eb] ring-2 ring-[#2563eb]/20 shadow-xs"
+                        : "bg-white border-slate-200 hover:border-blue-300 hover:bg-slate-50/60"
+                    }`}
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className={`text-xs font-extrabold ${reportSharingScope === "none" ? "text-[#2563eb]" : "text-slate-800"}`}>
+                          Do Not Share
+                        </span>
+                        <Lock className="h-3 w-3 text-slate-400" />
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-normal">
+                        Doctor will conduct consultation without access to prior diagnostic files.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sub-selector for Selected Reports */}
+                {reportSharingScope === "selected" && (
+                  <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-2 animate-fadeIn">
+                    <span className="text-[10.5px] font-bold text-slate-700 uppercase tracking-wider block">
+                      Available Reports ({availableReports.length})
+                    </span>
+                    {availableReports.length === 0 ? (
+                      <p className="text-xs text-slate-400 py-2">No uploaded reports found for this profile.</p>
+                    ) : (
+                      <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                        {availableReports.map((rep) => {
+                          const repId = rep._id || rep.id;
+                          const isChecked = selectedReportIds.includes(repId);
+                          return (
+                            <label
+                              key={repId}
+                              className={`flex items-center justify-between p-2 rounded-lg border text-xs cursor-pointer transition-all ${
+                                isChecked
+                                  ? "bg-blue-50 border-blue-200 text-blue-900 font-semibold"
+                                  : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 overflow-hidden">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedReportIds([...selectedReportIds, repId]);
+                                    } else {
+                                      setSelectedReportIds(selectedReportIds.filter(id => id !== repId));
+                                    }
+                                  }}
+                                  className="rounded border-slate-300 text-[#2563eb] focus:ring-[#2563eb] h-3.5 w-3.5"
+                                />
+                                <span className="truncate">{rep.reportCode || rep.name || `Report #${repId.slice(-6)}`}</span>
+                              </div>
+                              <span className="text-[10px] text-slate-400 shrink-0">
+                                {new Date(rep.createdAt || Date.now()).toLocaleDateString()}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Consent Checkbox */}
+                {reportSharingScope !== "none" && (
+                  <div className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-200/70 flex items-start gap-2.5">
+                    <input
+                      type="checkbox"
+                      id="doctor-modal-consent-grant"
+                      checked={patientConsentGranted}
+                      onChange={(e) => setPatientConsentGranted(e.target.checked)}
+                      className="mt-0.5 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4 shrink-0"
+                    />
+                    <label htmlFor="doctor-modal-consent-grant" className="text-[11px] text-emerald-950 font-medium leading-relaxed cursor-pointer">
+                      <span className="font-bold">Patient Consent Declaration:</span> I hereby grant consent to <span className="font-bold">Dr. {bookingDoctor.name}</span> to access my {reportSharingScope === "all" ? "complete medical history and diagnostic reports" : `${selectedReportIds.length} selected report(s)`} strictly for the purpose of <span className="font-bold">Telehealth Consultation & Clinical Evaluation</span> in accordance with NMC Telemedicine Practice Guidelines.
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* 4. Selection Summary Pill */}
             {bookingDoctor && selectedSlot && (
               <div className="p-3.5 rounded-2xl bg-gradient-to-r from-blue-50/80 via-emerald-50/50 to-blue-50/80 border border-blue-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fadeIn">
@@ -660,6 +846,16 @@ const Doctors = () => {
                       {new Date(selectedDate + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} • {formatTime12h(selectedSlot.startTime)} - {formatTime12h(selectedSlot.endTime)}
                     </h5>
                     <p className="text-[10px] text-slate-500 font-medium">with {bookingDoctor.name}</p>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <ShieldCheck className="h-3 w-3 text-emerald-600" />
+                      <span className="text-[9.5px] text-emerald-700 font-semibold">
+                        {reportSharingScope === "all"
+                          ? "Full Medical History Shared (Consent Granted)"
+                          : reportSharingScope === "selected"
+                          ? `${selectedReportIds.length} Report(s) Shared (Consent Granted)`
+                          : "No Diagnostic Reports Shared"}
+                      </span>
+                    </div>
                   </div>
                 </div>
                 <div className="text-right sm:border-l sm:border-blue-200/60 sm:pl-4">
@@ -689,7 +885,7 @@ const Doctors = () => {
               <Button 
                 onClick={handleConfirmAppointment} 
                 className="bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] hover:opacity-95 text-white font-bold rounded-xl shadow-md h-10 px-5 text-xs flex items-center gap-2"
-                disabled={bookingLoading || !bookingDoctor || !selectedSlot}
+                disabled={bookingLoading || !bookingDoctor || !selectedSlot || (reportSharingScope !== "none" && !patientConsentGranted)}
               >
                 {bookingLoading ? (
                   <>
