@@ -49,29 +49,21 @@ export default function HandoverLanding() {
           if (payload.profileId) {
             localStorage.setItem("selectedProfileId", payload.profileId);
           }
+          if (payload.reportId) {
+            localStorage.setItem("currentReportId", payload.reportId);
+          }
 
           // 2. Remove sensitive ticket parameter from browser history
           window.history.replaceState({}, document.title, window.location.pathname);
 
-          // 3. Seamlessly redirect directly to the consultation room or doctor selector
-          const { bookingId, reportId, doctorId, targetRoute } = payload;
+          // 3. Seamlessly redirect directly to the Video Consultation Room
+          const { bookingId, reportId } = payload;
+          const queryParts: string[] = [];
+          if (bookingId) queryParts.push(`bookingId=${encodeURIComponent(bookingId)}`);
+          if (reportId) queryParts.push(`reportId=${encodeURIComponent(reportId)}`);
+          queryParts.push("autoJoin=true");
 
-          if (bookingId) {
-            navigate(`/dashboard/user/consultations?bookingId=${bookingId}&autoJoin=true`, { replace: true });
-          } else if (targetRoute) {
-            if (targetRoute.startsWith("/consultation/room")) {
-              const extractedBookingId = targetRoute.split("/").pop();
-              navigate(`/dashboard/user/consultations?bookingId=${extractedBookingId}&autoJoin=true`, { replace: true });
-            } else if (targetRoute.startsWith("/consultation/select-doctor")) {
-              navigate(`/dashboard/user/appointments?doctorId=${doctorId || ""}&reportId=${reportId || ""}`, { replace: true });
-            } else {
-              navigate(targetRoute, { replace: true });
-            }
-          } else if (doctorId) {
-            navigate(`/dashboard/user/appointments?doctorId=${doctorId}&reportId=${reportId || ""}`, { replace: true });
-          } else {
-            navigate("/dashboard/user/consultations", { replace: true });
-          }
+          navigate(`/dashboard/user/consultations?${queryParts.join("&")}`, { replace: true });
         } else {
           setError(data?.error || "The consultation session has expired or is invalid. Please retry from the mobile app.");
         }
