@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import AgoraRTC, { IAgoraRTCClient, ICameraVideoTrack, IMicrophoneAudioTrack } from "agora-rtc-sdk-ng";
 import { useSearchParams } from "react-router-dom";
+import { presenceService } from "@/services/presence.service";
 
 const Consultations = () => {
   const [searchParams] = useSearchParams();
@@ -105,12 +106,32 @@ const Consultations = () => {
 
   useEffect(() => {
     loadData();
+    presenceService.connect();
+
+    const unbindAccepted = presenceService.on("consultation:accepted", (data) => {
+      console.log("Doctor accepted call:", data);
+      toast({
+        title: "Doctor accepted the call!",
+        description: `${data?.doctorName || "Doctor"} is joining the video room now.`,
+      });
+    });
+
+    const unbindMissed = presenceService.on("consultation:missed", (data) => {
+      toast({
+        title: "Doctor did not respond",
+        description: data?.reason || "Doctor was unable to take the call. Please try again or choose another doctor.",
+        variant: "destructive",
+      });
+    });
+
     return () => {
       // Cleanup video call on unmount
       if (durationTimerRef.current) clearInterval(durationTimerRef.current);
       if (localAudioRef.current) localAudioRef.current.close();
       if (localVideoRef.current) localVideoRef.current.close();
       if (clientRef.current) clientRef.current.leave();
+      unbindAccepted();
+      unbindMissed();
     };
   }, []);
 
@@ -218,7 +239,20 @@ const Consultations = () => {
     try {
       const b = bookingOverride || nextBooking;
       const targetBookingId = b?._id || b?.id || paramBookingId || (paramReportId ? `report-${paramReportId}` : "instant-telehealth-session");
+      const targetDoctorId = b?.doctorId?._id || (typeof b?.doctorId === "string" ? b.doctorId : undefined);
+
       toast({ title: "Connecting to telehealth consultation room..." });
+
+      // Send real-time incoming call alert to Doctor Dashboard
+      presenceService.notifyDoctorIncomingCall({
+        bookingId: targetBookingId,
+        doctorId: targetDoctorId,
+        patientName: localStorage.getItem("userName") || "Patient",
+        reportId: paramReportId || undefined,
+        reason: "Telehealth Video Consultation",
+        type: "instant",
+        timeoutSeconds: 90,
+      });
       
       const res: any = await apiRequest(`/api/video/token/${targetBookingId}`, { method: "GET" })
         .catch(() => ({ 
@@ -335,14 +369,26 @@ const Consultations = () => {
               {/* Doctor Video Feed (Big background) */}
               <div id="remote-video" className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center overflow-hidden">
                 {(!remoteVideoTrackActive || !isRealCall) && (
-                  <div className="text-center space-y-2 z-10">
-                    <div className="h-24 w-24 rounded-full bg-slate-800 border-2 border-slate-700/80 flex items-center justify-center text-slate-300 font-extrabold text-2xl animate-pulse">
-                      DR
+                  <div className="text-center space-y-3 z-10 px-4">
+                    <div className="relative mx-auto h-24 w-24">
+                      {!remoteUserConnected && (
+                        <div className="absolute inset-0 rounded-full bg-emerald-500/25 animate-ping pointer-events-none" />
+                      )}
+                      <div className="relative h-24 w-24 rounded-full bg-slate-800 border-2 border-slate-700/80 flex items-center justify-center text-slate-300 font-extrabold text-2xl shadow-xl">
+                        DR
+                      </div>
                     </div>
-                    <h3 className="font-extrabold text-sm">{nextBooking?.doctorId?.name || "Dr. Sarah Jenkins"}</h3>
-                    <Badge className="bg-emerald-500 text-white text-[9px] font-bold border-none">
-                      {remoteUserConnected ? "Doctor is connected" : "Waiting for doctor..."}
-                    </Badge>
+                    <div className="space-y-1">
+                      <h3 className="font-extrabold text-sm">{nextBooking?.doctorId?.name || "Doctor"}</h3>
+                      <Badge className={`${remoteUserConnected ? "bg-emerald-500" : "bg-blue-600 animate-pulse"} text-white text-[10px] font-bold border-none px-3 py-0.5`}>
+                        {remoteUserConnected ? "Doctor is connected" : "Calling Doctor... Ringing device"}
+                      </Badge>
+                    </div>
+                    {!remoteUserConnected && (
+                      <p className="text-[11px] text-slate-400 max-w-xs mx-auto leading-relaxed">
+                        Incoming call sent to doctor's dashboard. Waiting for doctor to accept...
+                      </p>
+                    )}
                   </div>
                 )}
                 {!isRealCall && remoteUserConnected && (
