@@ -58,6 +58,8 @@ export const API_ENDPOINTS = {
     CREATE: '/api/booking/create',
     CONFIRM: '/api/booking/confirm',
     LIST: '/api/booking/list',
+    SHARED_REPORTS: (bookingId: string) => `/api/booking/shared-reports/${bookingId}`,
+    AGREE_REPORT_ACCESS: (bookingId: string) => `/api/booking/agree-report-access/${bookingId}`,
   },
 
   // Ticket endpoints
