@@ -112,6 +112,7 @@ export const logout = () => {
   localStorage.removeItem("refreshToken");
   localStorage.removeItem("userRole");
   localStorage.removeItem("userPhone");
+  localStorage.removeItem("apiBaseUrl");
   clearAuthToken();
 };
 
@@ -131,11 +132,48 @@ export interface ConsumeHandshakeResponse {
   error?: string;
 }
 
-export const consumeHandshakeTicket = async (ticket: string): Promise<ConsumeHandshakeResponse> => {
-  return apiRequest(API_ENDPOINTS.AUTH.CONSUME_HANDSHAKE, {
-    method: "POST",
-    data: { ticket },
-    requiresAuth: false,
-    withCredentials: true,
-  });
+export const consumeHandshakeTicket = async (ticket: string, envHint?: string | null): Promise<ConsumeHandshakeResponse> => {
+  const defaultBase = import.meta.env.VITE_BACKEND_URL || "https://api.onyxhealthplus.com";
+
+  let primaryUrl = defaultBase;
+  if (envHint === "dev") {
+    primaryUrl = "https://dev-api.onyxhealthplus.com";
+  } else if (envHint === "prod") {
+    primaryUrl = "https://api.onyxhealthplus.com";
+  }
+
+  const isDev = primaryUrl.includes("dev-api");
+  const alternateUrl = isDev ? "https://api.onyxhealthplus.com" : "https://dev-api.onyxhealthplus.com";
+
+  try {
+    const res = await apiRequest<ConsumeHandshakeResponse>(API_ENDPOINTS.AUTH.CONSUME_HANDSHAKE, {
+      method: "POST",
+      data: { ticket },
+      requiresAuth: false,
+      withCredentials: true,
+      baseURL: primaryUrl,
+    });
+    localStorage.setItem("apiBaseUrl", primaryUrl);
+    return res;
+  } catch (primaryErr: any) {
+    const msg = (primaryErr?.message || "").toLowerCase();
+    // If ticket was invalid/expired on primary backend, try alternate backend in case of dev/prod mismatch
+    if (msg.includes("invalid") || msg.includes("expired") || msg.includes("401") || msg.includes("not found")) {
+      try {
+        console.warn(`Ticket not found on ${primaryUrl}, checking alternate backend ${alternateUrl}...`);
+        const altRes = await apiRequest<ConsumeHandshakeResponse>(API_ENDPOINTS.AUTH.CONSUME_HANDSHAKE, {
+          method: "POST",
+          data: { ticket },
+          requiresAuth: false,
+          withCredentials: true,
+          baseURL: alternateUrl,
+        });
+        localStorage.setItem("apiBaseUrl", alternateUrl);
+        return altRes;
+      } catch {
+        throw primaryErr;
+      }
+    }
+    throw primaryErr;
+  }
 };
