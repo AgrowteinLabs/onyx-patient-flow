@@ -92,6 +92,10 @@ const Consultations = () => {
   const localStreamRef = useRef<MediaStream | null>(null);
   const peerConnRef = useRef<RTCPeerConnection | null>(null);
   const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
+  const peerJSRef = useRef<any>(null);
+  const p2pRetryTimerRef = useRef<any>(null);
+  const remoteUserConnectedRef = useRef(false);
+  const handleJoinCallRef = useRef<any>(null);
 
   // Agora states & refs
   const clientRef = useRef<IAgoraRTCClient | null>(null);
@@ -188,7 +192,9 @@ const Consultations = () => {
 
       if (autoJoin && activeBooking) {
         setTimeout(() => {
-          handleJoinCall(activeBooking);
+          if (handleJoinCallRef.current) {
+            handleJoinCallRef.current(activeBooking);
+          }
         }, 500);
       }
     } catch (err) {
@@ -262,6 +268,22 @@ const Consultations = () => {
     }
   };
 
+  const attachRemoteStream = (stream: MediaStream) => {
+    console.log("[Telehealth] Remote media stream attached to video viewport on patient:", stream.id);
+    remoteUserConnectedRef.current = true;
+    (remoteVideoElRef as any)._stream = stream;
+    if (remoteVideoElRef.current) {
+      remoteVideoElRef.current.srcObject = stream;
+      remoteVideoElRef.current.play().catch(() => {});
+    }
+    setRemoteUserConnected(true);
+    setRemoteVideoTrackActive(true);
+    if (p2pRetryTimerRef.current) {
+      clearInterval(p2pRetryTimerRef.current);
+      p2pRetryTimerRef.current = null;
+    }
+  };
+
   const setupWebRTCPeer = (targetRoomId: string, role: "patient" | "doctor", localStream: MediaStream | null) => {
     try {
       if (broadcastChannelRef.current) {
@@ -291,14 +313,7 @@ const Consultations = () => {
       pc.ontrack = (event) => {
         console.log("WebRTC ontrack received remote video on patient:", event.streams[0]);
         if (event.streams && event.streams[0]) {
-          const stream = event.streams[0];
-          (remoteVideoElRef as any)._stream = stream;
-          if (remoteVideoElRef.current) {
-            remoteVideoElRef.current.srcObject = stream;
-            remoteVideoElRef.current.play().catch(() => {});
-          }
-          setRemoteUserConnected(true);
-          setRemoteVideoTrackActive(true);
+          attachRemoteStream(event.streams[0]);
           toast({ title: "Doctor connected via live video feed!" });
         }
       };
@@ -376,6 +391,99 @@ const Consultations = () => {
 
     } catch (err) {
       console.warn("WebRTC setup note on patient:", err);
+    }
+  };
+
+  const setupP2PConnection = async (targetRoomId: string, role: "patient" | "doctor", localStream: MediaStream | null) => {
+    try {
+      if (peerJSRef.current) {
+        try { peerJSRef.current.destroy(); } catch { /* ignore */ }
+        peerJSRef.current = null;
+      }
+      if (p2pRetryTimerRef.current) {
+        clearInterval(p2pRetryTimerRef.current);
+        p2pRetryTimerRef.current = null;
+      }
+      remoteUserConnectedRef.current = false;
+
+      const PeerClass = (window as any).Peer || await new Promise<any>((resolve) => {
+        const s = document.createElement("script");
+        s.src = "https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js";
+        s.onload = () => resolve((window as any).Peer);
+        s.onerror = () => resolve(null);
+        document.head.appendChild(s);
+      });
+
+      if (!PeerClass) {
+        console.warn("[Telehealth P2P] PeerJS could not be loaded");
+        return;
+      }
+
+      const cleanRoomId = String(targetRoomId).replace(/[^a-zA-Z0-9_-]/g, "");
+      const myPeerId = role === "patient" ? `onyx-pat-${cleanRoomId}` : `onyx-doc-${cleanRoomId}`;
+      const targetPeerId = role === "patient" ? `onyx-doc-${cleanRoomId}` : `onyx-pat-${cleanRoomId}`;
+
+      console.log(`[Telehealth P2P] Initializing Peer (${role}): ${myPeerId} -> Target: ${targetPeerId}`);
+
+      const peer = new PeerClass(myPeerId, {
+        config: {
+          iceServers: [
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun1.l.google.com:19302" },
+            { urls: "stun:stun2.l.google.com:19302" },
+          ],
+        },
+        debug: 1,
+      });
+      peerJSRef.current = peer;
+
+      peer.on("call", (mediaCall: any) => {
+        console.log(`[Telehealth P2P] Incoming call from ${mediaCall.peer}. Answering with local stream...`);
+        if (localStream) {
+          mediaCall.answer(localStream);
+        } else {
+          mediaCall.answer();
+        }
+        mediaCall.on("stream", (remoteStream: MediaStream) => {
+          console.log("[Telehealth P2P] Remote video stream received via PeerJS answer on patient!");
+          attachRemoteStream(remoteStream);
+        });
+      });
+
+      peer.on("open", (id: string) => {
+        console.log(`[Telehealth P2P] Peer open with ID: ${id}`);
+        const attemptOutgoingCall = () => {
+          if (remoteUserConnectedRef.current) return;
+          console.log(`[Telehealth P2P] Attempting call to ${targetPeerId}...`);
+          try {
+            if (localStream) {
+              const mediaCall = peer.call(targetPeerId, localStream);
+              if (mediaCall) {
+                mediaCall.on("stream", (remoteStream: MediaStream) => {
+                  console.log("[Telehealth P2P] Remote stream received from outgoing call on patient!");
+                  attachRemoteStream(remoteStream);
+                });
+              }
+            }
+          } catch (e) {
+            console.debug("[Telehealth P2P] Call attempt note:", e);
+          }
+        };
+
+        attemptOutgoingCall();
+        p2pRetryTimerRef.current = setInterval(attemptOutgoingCall, 2500);
+      });
+
+      peer.on("error", (err: any) => {
+        console.warn("[Telehealth P2P] Peer note:", err?.type || err?.message || err);
+        if (err?.type === "unavailable-id") {
+          setTimeout(() => {
+            try { peer.reconnect(); } catch { /* ignore */ }
+          }, 1000);
+        }
+      });
+    } catch (err) {
+      console.warn("[Telehealth P2P] Setup error:", err);
     }
   };
 
@@ -783,6 +891,7 @@ const Consultations = () => {
   };
 
   const handleJoinCall = async (bookingOverride?: Booking | null) => {
+    handleJoinCallRef.current = handleJoinCall;
     try {
       const b = bookingOverride || nextBooking;
       const targetBookingId = b?._id || b?.id || paramBookingId || (paramReportId ? `report-${paramReportId}` : "instant-telehealth-session");
@@ -844,6 +953,7 @@ const Consultations = () => {
 
       const localStream = await startLocalMedia();
       setupWebRTCPeer(targetBookingId, "patient", localStream);
+      setupP2PConnection(targetBookingId, "patient", localStream);
 
       const isRealAgora = appId && !appId.startsWith("mock") && appId.length >= 10;
       if (isRealAgora) {
@@ -869,6 +979,16 @@ const Consultations = () => {
       clearInterval(durationTimerRef.current);
       durationTimerRef.current = null;
     }
+
+    if (peerJSRef.current) {
+      try { peerJSRef.current.destroy(); } catch (e) { console.debug("PeerJS destroy note:", e); }
+      peerJSRef.current = null;
+    }
+    if (p2pRetryTimerRef.current) {
+      clearInterval(p2pRetryTimerRef.current);
+      p2pRetryTimerRef.current = null;
+    }
+    remoteUserConnectedRef.current = false;
 
     if (broadcastChannelRef.current) {
       try {
