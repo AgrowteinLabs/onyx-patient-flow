@@ -114,3 +114,28 @@ export const logout = () => {
   localStorage.removeItem("userPhone");
   clearAuthToken();
 };
+
+export interface ConsumeHandshakeResponse {
+  status: string;
+  token?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  user?: any;
+  payload?: {
+    reportId?: string;
+    profileId?: string;
+    doctorId?: string;
+    bookingId?: string;
+    targetRoute?: string;
+  };
+  error?: string;
+}
+
+export const consumeHandshakeTicket = async (ticket: string): Promise<ConsumeHandshakeResponse> => {
+  return apiRequest(API_ENDPOINTS.AUTH.CONSUME_HANDSHAKE, {
+    method: "POST",
+    data: { ticket },
+    requiresAuth: false,
+    withCredentials: true,
+  });
+};

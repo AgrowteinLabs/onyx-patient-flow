@@ -23,8 +23,12 @@ import {
   Tv
 } from "lucide-react";
 import AgoraRTC, { IAgoraRTCClient, ICameraVideoTrack, IMicrophoneAudioTrack } from "agora-rtc-sdk-ng";
+import { useSearchParams } from "react-router-dom";
 
 const Consultations = () => {
+  const [searchParams] = useSearchParams();
+  const paramBookingId = searchParams.get("bookingId");
+  const autoJoin = searchParams.get("autoJoin") === "true";
   const { toast } = useToast();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -75,10 +79,20 @@ const Consultations = () => {
       });
       
       setBookings(upcoming);
-      if (upcoming.length > 0) {
-        setNextBooking(upcoming[0]);
-      } else {
-        setNextBooking(null);
+
+      // Match explicit param booking if present
+      let matchedBooking: Booking | null = null;
+      if (paramBookingId) {
+        matchedBooking = bookingsArr.find(b => b && (b._id === paramBookingId || b.id === paramBookingId)) || null;
+      }
+
+      const activeBooking = matchedBooking || (upcoming.length > 0 ? upcoming[0] : null);
+      setNextBooking(activeBooking);
+
+      if (autoJoin && activeBooking) {
+        setTimeout(() => {
+          handleJoinCall(activeBooking);
+        }, 500);
       }
     } catch (err) {
       console.error(err);
@@ -199,9 +213,10 @@ const Consultations = () => {
     }
   };
 
-  const handleJoinCall = async () => {
+  const handleJoinCall = async (bookingOverride?: Booking | null) => {
     try {
-      const targetBookingId = nextBooking?._id || nextBooking?.id || "mock-booking-id-123";
+      const b = bookingOverride || nextBooking;
+      const targetBookingId = b?._id || b?.id || paramBookingId || "mock-booking-id-123";
       toast({ title: "Requesting video room access..." });
       
       const res: any = await apiRequest(`/api/video/token/${targetBookingId}`, { method: "GET" })
@@ -448,7 +463,7 @@ const Consultations = () => {
 
               <div className="mt-8">
                 <Button 
-                  onClick={handleJoinCall}
+                  onClick={() => handleJoinCall()}
                   className="bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] hover:opacity-95 text-white font-bold rounded-xl shadow-md h-11 px-6 text-xs"
                   disabled={!nextBooking}
                 >

@@ -9,6 +9,8 @@ export const API_ENDPOINTS = {
     VERIFY_NON_USER: '/api/auth/verify-non-user',
     FORGOT_PASSWORD: '/api/auth/forgot-password',
     RESET_PASSWORD: '/api/auth/reset-password',
+    CONSUME_HANDSHAKE: '/api/auth/consume-handshake',
+    CONSULTATION_HANDSHAKE: '/api/auth/consultation-handshake',
   },
   
   // Profile endpoints

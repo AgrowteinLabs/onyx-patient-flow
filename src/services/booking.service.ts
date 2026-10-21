@@ -17,22 +17,42 @@ export interface Booking {
   [key: string]: any;
 }
 
+export interface CreateBookingSlotParams {
+  slotDate: string;
+  slotTimeStart: string;
+  slotTimeEnd: string;
+  profileId?: string;
+}
+
 export const createBooking = async (
   doctorId: string,
-  slot: string,
+  slotOrDetails: string | CreateBookingSlotParams,
   profileId?: string
 ): Promise<any> => {
-  const dateObj = new Date(slot);
-  const slotDate = dateObj.toISOString();
-  
-  const hours = String(dateObj.getUTCHours()).padStart(2, '0');
-  const minutes = String(dateObj.getUTCMinutes()).padStart(2, '0');
-  const slotTimeStart = `${hours}:${minutes}`;
-  
-  const endDateObj = new Date(dateObj.getTime() + 30 * 60 * 1000);
-  const endHours = String(endDateObj.getUTCHours()).padStart(2, '0');
-  const endMinutes = String(endDateObj.getUTCMinutes()).padStart(2, '0');
-  const slotTimeEnd = `${endHours}:${endMinutes}`;
+  let slotDate: string;
+  let slotTimeStart: string;
+  let slotTimeEnd: string;
+  let targetProfileId = profileId;
+
+  if (typeof slotOrDetails === 'object' && slotOrDetails !== null) {
+    slotTimeStart = slotOrDetails.slotTimeStart;
+    slotTimeEnd = slotOrDetails.slotTimeEnd;
+    targetProfileId = slotOrDetails.profileId || profileId;
+    const d = new Date(slotOrDetails.slotDate);
+    slotDate = !isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString();
+  } else {
+    const dateObj = new Date(slotOrDetails as string);
+    slotDate = !isNaN(dateObj.getTime()) ? dateObj.toISOString() : new Date().toISOString();
+    
+    const hours = String(dateObj.getHours()).padStart(2, '0');
+    const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+    slotTimeStart = `${hours}:${minutes}`;
+    
+    const endDateObj = new Date(dateObj.getTime() + 30 * 60 * 1000);
+    const endHours = String(endDateObj.getHours()).padStart(2, '0');
+    const endMinutes = String(endDateObj.getMinutes()).padStart(2, '0');
+    slotTimeEnd = `${endHours}:${endMinutes}`;
+  }
 
   const data: any = {
     doctorId,
@@ -42,8 +62,8 @@ export const createBooking = async (
     slotTimeEnd,
   };
 
-  if (profileId) {
-    data.profileId = profileId;
+  if (targetProfileId) {
+    data.profileId = targetProfileId;
   }
 
   return apiRequest(API_ENDPOINTS.BOOKING.CREATE, {
@@ -52,20 +72,31 @@ export const createBooking = async (
   });
 };
 
+export interface ConfirmBookingPayload {
+  bookingId: string;
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+}
+
 export const confirmBooking = async (
-  bookingId: string,
-  paymentId: string = "pay_mock123456",
-  orderId: string = "order_mock123456",
-  signature: string = "sig_mock123456"
+  bookingIdOrPayload: string | ConfirmBookingPayload,
+  paymentId?: string,
+  orderId?: string,
+  signature?: string
 ): Promise<any> => {
+  const data = typeof bookingIdOrPayload === "object"
+    ? bookingIdOrPayload
+    : {
+        bookingId: bookingIdOrPayload,
+        razorpay_payment_id: paymentId,
+        razorpay_order_id: orderId,
+        razorpay_signature: signature,
+      };
+
   return apiRequest(API_ENDPOINTS.BOOKING.CONFIRM, {
     method: 'POST',
-    data: {
-      bookingId,
-      razorpay_payment_id: paymentId,
-      razorpay_order_id: orderId,
-      razorpay_signature: signature,
-    },
+    data,
   });
 };
 
