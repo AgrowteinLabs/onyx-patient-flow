@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { useToast } from "@/hooks/use-toast";
 import { listSessions, Session } from "@/services/session.service";
 import { listBookings, createBooking, confirmBooking, Booking } from "@/services/booking.service";
-import { listDoctors, Doctor } from "@/services/doctor.service";
+import { listDoctors, getDoctorAvailability, Doctor, DoctorSlot } from "@/services/doctor.service";
 import { listReportsByProfile } from "@/services/report.service";
 import { apiRequest } from "@/lib/api-request";
 import { 
@@ -497,6 +497,22 @@ const Consultations = () => {
     }
   };
 
+  // Check if a slot has already passed for the given date
+  const isSlotPast = (slotDateStr: string, slotStartTime: string) => {
+    const now = new Date();
+    const pad = (n: number) => n.toString().padStart(2, "0");
+    const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
+    if (slotDateStr < todayStr) return true;
+    if (slotDateStr > todayStr) return false;
+
+    const [h, m] = slotStartTime.split(":").map(Number);
+    const slotMinutes = (h || 0) * 60 + (m || 0);
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    return slotMinutes <= currentMinutes;
+  };
+
   const handleStartInstantCall = async () => {
     if (!instantDoctor) {
       toast({ title: "Please select a specialist doctor to consult with.", variant: "destructive" });
@@ -512,13 +528,54 @@ const Consultations = () => {
       const docId = instantDoctor._id || instantDoctor.id || "";
       const profileId = localStorage.getItem("selectedProfileId") || undefined;
       
+      toast({ title: "Checking doctor availability & setting up consultation..." });
+
+      // 1. Background Appointment Setup: Look up doctor's verified availability slots
       const now = new Date();
       const pad = (n: number) => n.toString().padStart(2, "0");
-      const slotDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-      const slotTimeStart = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-      const endD = new Date(now.getTime() + 30 * 60 * 1000);
-      const slotTimeEnd = `${pad(endD.getHours())}:${pad(endD.getMinutes())}`;
+      
+      const datesToCheck: string[] = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(now);
+        d.setDate(now.getDate() + i);
+        datesToCheck.push(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+      }
 
+      let chosenSlotDate = datesToCheck[0];
+      let chosenSlotStart = "10:00";
+      let chosenSlotEnd = "10:30";
+      let slotFound = false;
+
+      for (const dateStr of datesToCheck) {
+        try {
+          const slots: DoctorSlot[] = await getDoctorAvailability(docId, dateStr);
+          if (Array.isArray(slots) && slots.length > 0) {
+            const validSlot = slots.find((s) => !s.isBooked && !isSlotPast(dateStr, s.startTime));
+            if (validSlot) {
+              chosenSlotDate = dateStr;
+              chosenSlotStart = validSlot.startTime;
+              chosenSlotEnd = validSlot.endTime;
+              slotFound = true;
+              console.log("[Instant Consultation Flow] Found verified slot in doctor schedule:", chosenSlotDate, chosenSlotStart, chosenSlotEnd);
+              break;
+            }
+          }
+        } catch (err) {
+          console.warn("[Instant Consultation Flow] Doctor availability check note for date:", dateStr, err);
+        }
+      }
+
+      if (!slotFound) {
+        // Fallback to tomorrow with standard slot if today has passed
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        chosenSlotDate = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`;
+        chosenSlotStart = "10:00";
+        chosenSlotEnd = "10:30";
+        console.log("[Instant Consultation Flow] Using fallback appointment slot:", chosenSlotDate, chosenSlotStart, chosenSlotEnd);
+      }
+
+      // 2. Prepare report sharing payload (ABDM & NMC guidelines)
       const reportSharingPayload = {
         scope: instantReportScope,
         selectedReportIds: instantReportScope === "selected" ? instantSelectedReportIds : [],
@@ -528,183 +585,190 @@ const Consultations = () => {
         }
       };
 
-      toast({ title: "Initiating direct consultation..." });
       await loadRazorpayScript();
 
-      let createdBooking: Booking | null = null;
-      let targetBookingId = `instant-${docId}-${Date.now()}`;
+      // 3. Create booking with verified appointment schema (matches Appointments.tsx)
+      console.log("[Instant Consultation Flow] Calling createBooking with background appointment setup:", {
+        docId,
+        slotDate: chosenSlotDate,
+        slotTimeStart: chosenSlotStart,
+        slotTimeEnd: chosenSlotEnd,
+        type: "scheduled"
+      });
 
-      try {
-        const response: any = await createBooking(docId, {
-          slotDate,
-          slotTimeStart,
-          slotTimeEnd,
-          profileId,
-          type: "instant",
-          reportSharing: reportSharingPayload,
-          shareMedicalHistory: instantReportScope === "all",
-          selectedReportIds: instantReportScope === "selected" ? instantSelectedReportIds : [],
-        }, profileId);
+      const response: any = await createBooking(docId, {
+        slotDate: chosenSlotDate,
+        slotTimeStart: chosenSlotStart,
+        slotTimeEnd: chosenSlotEnd,
+        profileId,
+        type: "scheduled",
+        reportSharing: reportSharingPayload,
+        shareMedicalHistory: instantReportScope === "all",
+        selectedReportIds: instantReportScope === "selected" ? instantSelectedReportIds : [],
+      }, profileId);
 
-        console.log("[Instant Booking Flow] createBooking API Response received:", response);
+      console.log("[Instant Consultation Flow] createBooking API Response received:", response);
 
-        if (response && response.error && !response.booking) {
-          console.error("[Instant Booking Flow] createBooking returned an error:", response.error);
-          toast({ 
-            title: response.error?.description || response.error?.message || "Doctor Settlement Account Inactive",
-            description: "The selected specialist cannot accept payments at this time. Please select another doctor or book a scheduled slot.",
-            variant: "destructive" 
-          });
-          setInstantCallStarting(false);
-          return;
-        }
-
-        if (response && (response.booking || response._id || response.id || response.bookingId)) {
-          createdBooking = response.booking || response;
-          targetBookingId = response.bookingId || response.booking?._id || response.booking?.id || response._id || response.id || targetBookingId;
-        }
-
-        const razorpayOrderId = 
-          response?.razorpayOrderId || 
-          response?.paymentOrderId || 
-          response?.orderId || 
-          response?.order_id || 
-          response?.order?.id || 
-          response?.booking?.razorpayOrderId || 
-          response?.booking?.paymentOrderId;
-
-        const rzpKey = 
-          response?.key || 
-          response?.keyId || 
-          response?.key_id || 
-          response?.razorpayKey || 
-          "rzp_live_SSEMZ6dhpfXToh";
-
-        const calcAmount = 
-          response?.amountPaise || 
-          response?.amount || 
-          response?.order?.amount || 
-          response?.booking?.amountPaise || 
-          response?.booking?.amount || 
-          50000;
-
-        console.log("[Instant Booking Flow] Payment Parameters - razorpayOrderId:", razorpayOrderId, "rzpKey:", rzpKey, "amount:", calcAmount);
-
-        // If backend initiated a Razorpay payment order for this consultation
-        if (razorpayOrderId && (window as any).Razorpay) {
-          setOpenInstantModal(false);
-          const userDetails = { name: "", email: "", contact: "" };
-          try {
-            const userStr = localStorage.getItem("user");
-            if (userStr) {
-              const u = JSON.parse(userStr);
-              userDetails.name = u.name || "";
-              userDetails.email = u.email || "";
-              userDetails.contact = u.phone || u.contact || "";
-            }
-          } catch { /* ignore */ }
-
-          const options = {
-            key: rzpKey,
-            amount: calcAmount,
-            currency: response.currency || response.order?.currency || "INR",
-            name: "Onyx Health Plus",
-            description: "Doctor Consultation Booking",
-            order_id: razorpayOrderId,
-            handler: async function (paymentRes: any) {
-              console.log("[Instant Booking Flow] Payment successful. Payment ID:", paymentRes.razorpay_payment_id, "Order ID:", paymentRes.razorpay_order_id);
-              try {
-                toast({ title: "Confirming consultation booking..." });
-                await confirmBooking({
-                  bookingId: targetBookingId,
-                  razorpay_payment_id: paymentRes.razorpay_payment_id,
-                  razorpay_order_id: paymentRes.razorpay_order_id,
-                  razorpay_signature: paymentRes.razorpay_signature,
-                });
-
-                toast({
-                  title: "Consultation Confirmed!",
-                  description: "Connecting to specialist...",
-                });
-
-                const confirmedBooking: Booking = {
-                  _id: targetBookingId,
-                  id: targetBookingId,
-                  doctorId: {
-                    _id: docId,
-                    name: instantDoctor.name,
-                    specialty: instantDoctor.specialty,
-                  },
-                  slot: slotDate,
-                  status: "confirmed",
-                  type: "instant",
-                };
-                setNextBooking(confirmedBooking);
-                await handleJoinCall(confirmedBooking);
-              } catch (confirmErr: any) {
-                console.error("[Instant Booking Flow] Backend confirmation failed:", confirmErr);
-                toast({ title: confirmErr.message || "Failed to confirm consultation on backend", variant: "destructive" });
-              } finally {
-                setInstantCallStarting(false);
-              }
-            },
-            prefill: {
-              contact: userDetails.contact,
-              email: userDetails.email,
-            },
-            theme: {
-              color: "#0D9488",
-            },
-            modal: {
-              ondismiss: function () {
-                console.log("[Instant Booking Flow] Checkout dismissed by user.");
-                toast({ title: "Consultation payment cancelled", variant: "destructive" });
-                setInstantCallStarting(false);
-              }
-            }
-          };
-
-          const rzp = new (window as any).Razorpay(options);
-
-          rzp.on("payment.failed", function (failRes: any) {
-            console.error("[Instant Booking Flow] Razorpay payment failed:", failRes?.error);
-            const errDesc = failRes?.error?.description || failRes?.error?.reason || "Payment was declined by bank or UPI app.";
-            toast({
-              title: "Payment Failed",
-              description: errDesc,
-              variant: "destructive",
-            });
-            setInstantCallStarting(false);
-          });
-
-          rzp.open();
-          return;
-        }
-
-      } catch (err) {
-        console.warn("[Instant Booking Flow] Direct booking API fallback:", err);
+      if (response && response.error && !response.booking) {
+        console.error("[Instant Consultation Flow] createBooking returned error:", response.error);
+        toast({ 
+          title: response.error?.description || response.error?.message || "Doctor Settlement Account Inactive",
+          description: "The selected specialist cannot accept payments at this time. Please select another doctor.",
+          variant: "destructive" 
+        });
+        setInstantCallStarting(false);
+        return;
       }
 
+      const bookingId = response.booking?._id || response.booking?.id || response._id || response.id;
+      if (!bookingId) {
+        throw new Error("Failed to get booking reference from server.");
+      }
+
+      const razorpayOrderId = 
+        response?.razorpayOrderId || 
+        response?.paymentOrderId || 
+        response?.orderId || 
+        response?.order_id || 
+        response?.order?.id || 
+        response?.booking?.razorpayOrderId || 
+        response?.booking?.paymentOrderId;
+
+      const rzpKey = 
+        response?.key || 
+        response?.keyId || 
+        response?.key_id || 
+        response?.razorpayKey || 
+        "rzp_live_SSEMZ6dhpfXToh";
+
+      const calcAmount = 
+        response?.amountPaise || 
+        response?.amount || 
+        response?.order?.amount || 
+        response?.booking?.amountPaise || 
+        response?.booking?.amount || 
+        50000;
+
+      console.log("[Instant Consultation Flow] Payment parameters:", { bookingId, razorpayOrderId, rzpKey, calcAmount });
+
+      // 4. Launch Razorpay payment flow
+      if (razorpayOrderId && (window as any).Razorpay) {
+        setOpenInstantModal(false);
+        const userDetails = { name: "", email: "", contact: "" };
+        try {
+          const userStr = localStorage.getItem("user");
+          if (userStr) {
+            const u = JSON.parse(userStr);
+            userDetails.name = u.name || "";
+            userDetails.email = u.email || "";
+            userDetails.contact = u.phone || u.contact || "";
+          }
+        } catch { /* ignore */ }
+
+        const options = {
+          key: rzpKey,
+          amount: calcAmount,
+          currency: response.currency || response.order?.currency || "INR",
+          name: "Onyx Health Plus",
+          description: `Instant Consultation with Dr. ${instantDoctor.name}`,
+          order_id: razorpayOrderId,
+          handler: async function (paymentRes: any) {
+            console.log("[Instant Consultation Flow] Payment succeeded:", paymentRes);
+            try {
+              toast({ title: "Payment Confirmed!", description: "Activating consultation room..." });
+              await confirmBooking({
+                bookingId,
+                razorpay_payment_id: paymentRes.razorpay_payment_id,
+                razorpay_order_id: paymentRes.razorpay_order_id,
+                razorpay_signature: paymentRes.razorpay_signature,
+              });
+
+              toast({
+                title: "Consultation Confirmed!",
+                description: `Connecting live with Dr. ${instantDoctor.name}...`,
+              });
+
+              const confirmedBooking: Booking = {
+                _id: bookingId,
+                id: bookingId,
+                doctorId: {
+                  _id: docId,
+                  name: instantDoctor.name,
+                  specialty: instantDoctor.specialty,
+                  photo: instantDoctor.photo,
+                },
+                slot: chosenSlotDate,
+                status: "confirmed",
+                type: "scheduled",
+                profileId,
+              };
+
+              setNextBooking(confirmedBooking);
+              loadData();
+              await handleJoinCall(confirmedBooking);
+            } catch (confirmErr: any) {
+              console.error("[Instant Consultation Flow] Backend confirmation failed:", confirmErr);
+              toast({ title: confirmErr.message || "Failed to confirm consultation on backend", variant: "destructive" });
+            } finally {
+              setInstantCallStarting(false);
+            }
+          },
+          prefill: {
+            contact: userDetails.contact,
+            email: userDetails.email,
+          },
+          theme: {
+            color: "#0D9488",
+          },
+          modal: {
+            ondismiss: function () {
+              console.log("[Instant Consultation Flow] Checkout dismissed by user.");
+              toast({ title: "Consultation payment cancelled", variant: "destructive" });
+              setInstantCallStarting(false);
+            }
+          }
+        };
+
+        const rzp = new (window as any).Razorpay(options);
+
+        rzp.on("payment.failed", function (failRes: any) {
+          console.error("[Instant Consultation Flow] Razorpay payment failed:", failRes?.error);
+          const errDesc = failRes?.error?.description || failRes?.error?.reason || "Payment was declined by bank or UPI app.";
+          toast({
+            title: "Payment Failed",
+            description: errDesc,
+            variant: "destructive",
+          });
+          setInstantCallStarting(false);
+        });
+
+        rzp.open();
+        return;
+      }
+
+      // If Razorpay order was not generated/required (e.g. direct access mode)
       setOpenInstantModal(false);
-      
-      const instantBookingObj: Booking = createdBooking || {
-        _id: targetBookingId,
-        id: targetBookingId,
+      const instantBookingObj: Booking = response.booking || {
+        _id: bookingId,
+        id: bookingId,
         doctorId: {
           _id: docId,
           name: instantDoctor.name,
           specialty: instantDoctor.specialty,
+          photo: instantDoctor.photo,
         },
-        slot: slotDate,
-        status: "in-progress",
-        type: "instant",
+        slot: chosenSlotDate,
+        status: "confirmed",
+        type: "scheduled",
+        profileId,
       };
 
       setNextBooking(instantBookingObj);
+      loadData();
       await handleJoinCall(instantBookingObj);
 
     } catch (err: any) {
-      console.error("Instant call creation failed:", err);
+      console.error("[Instant Consultation Flow] Call creation failed:", err);
       toast({ title: err?.message || "Failed to start direct consultation", variant: "destructive" });
     } finally {
       setInstantCallStarting(false);
