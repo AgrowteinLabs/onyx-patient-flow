@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { listBookings, createBooking, confirmBooking, Booking } from "@/services/booking.service";
 import { listDoctors, getDoctorAvailability, Doctor, DoctorSlot } from "@/services/doctor.service";
+import { useNavigate } from "react-router-dom";
+import { getBookingLifecycle } from "@/utils/booking-lifecycle";
 import { 
   Calendar, 
   Clock, 
@@ -22,7 +24,9 @@ import {
   Sunrise,
   Sun,
   Sunset,
-  Sparkles
+  Sparkles,
+  Video,
+  AlertTriangle
 } from "lucide-react";
 
 const loadRazorpayScript = () => {
@@ -51,6 +55,7 @@ const loadRazorpayScript = () => {
 };
 
 const Appointments = () => {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -327,8 +332,29 @@ const Appointments = () => {
     }
   };
 
-  const upcoming = bookings.filter(b => b.status !== "Completed" && b.status !== "Cancelled");
-  const past = bookings.filter(b => b.status === "Completed" || b.status === "Cancelled");
+  const upcoming = useMemo(() => {
+    const list = bookings.filter((b) => {
+      const { isPast } = getBookingLifecycle(b);
+      return !isPast;
+    });
+    return list.sort((a, b) => {
+      const timeA = new Date(a.slot || a.slotDate || 0).getTime();
+      const timeB = new Date(b.slot || b.slotDate || 0).getTime();
+      return (isNaN(timeA) ? 0 : timeA) - (isNaN(timeB) ? 0 : timeB);
+    });
+  }, [bookings]);
+
+  const past = useMemo(() => {
+    const list = bookings.filter((b) => {
+      const { isPast } = getBookingLifecycle(b);
+      return isPast;
+    });
+    return list.sort((a, b) => {
+      const timeA = new Date(a.slot || a.slotDate || 0).getTime();
+      const timeB = new Date(b.slot || b.slotDate || 0).getTime();
+      return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+    });
+  }, [bookings]);
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -373,41 +399,52 @@ const Appointments = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {upcoming.map((b) => (
-                    <div key={b._id || b.id} className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-xl border border-slate-100 bg-slate-50">
-                      <div className="flex items-start gap-4">
-                        <div className="h-12 w-12 rounded-full bg-slate-200 flex items-center justify-center text-[#2563eb] font-bold text-lg uppercase shrink-0">
-                          {b.doctorId?.name ? b.doctorId.name[0] : "D"}
-                        </div>
-                        <div className="space-y-1">
-                          <h3 className="font-extrabold text-slate-800 text-sm tracking-wide">{b.doctorId?.name || "Medical Expert"}</h3>
-                          <Badge variant="secondary" className="bg-[#2563eb]/10 text-[#2563eb] border-none text-[8.5px] font-bold uppercase tracking-wider">
-                            {b.doctorId?.specialty || "General Medicine"}
-                          </Badge>
-                          <div className="flex items-center gap-1 text-[10px] text-slate-400 font-semibold mt-1">
-                            <MapPin className="h-3.5 w-3.5 text-slate-300" />
-                            <span>Clinic Wing B, General Hospital</span>
+                  {upcoming.map((b) => {
+                    const lifecycle = getBookingLifecycle(b);
+                    return (
+                      <div key={b._id || b.id} className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 rounded-xl border border-slate-100 bg-slate-50">
+                        <div className="flex items-start gap-4">
+                          <div className="h-12 w-12 rounded-full bg-slate-200 flex items-center justify-center text-[#2563eb] font-bold text-lg uppercase shrink-0">
+                            {b.doctorId?.name ? b.doctorId.name[0] : "D"}
+                          </div>
+                          <div className="space-y-1">
+                            <h3 className="font-extrabold text-slate-800 text-sm tracking-wide">{b.doctorId?.name || "Medical Expert"}</h3>
+                            <Badge variant="secondary" className="bg-[#2563eb]/10 text-[#2563eb] border-none text-[8.5px] font-bold uppercase tracking-wider">
+                              {b.doctorId?.specialty || "General Medicine"}
+                            </Badge>
+                            <div className="flex items-center gap-1 text-[10px] text-slate-400 font-semibold mt-1">
+                              <MapPin className="h-3.5 w-3.5 text-slate-300" />
+                              <span>Clinic Wing B, General Hospital</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      <div className="flex flex-row md:flex-col items-center md:items-end justify-between border-t md:border-t-0 pt-3 md:pt-0 border-slate-200/50">
-                        <div className="text-left md:text-right space-y-0.5">
-                          <div className="text-xs font-black text-slate-700 flex items-center gap-1 justify-start md:justify-end">
-                            <Clock className="h-3.5 w-3.5 text-slate-400" />
-                            {(() => {
-                              const d = new Date(b.slot || b.slotDate || "");
-                              return isNaN(d.getTime()) ? "Scheduled Time" : d.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-                            })()}
+                        <div className="flex flex-row md:flex-col items-center md:items-end justify-between gap-2 border-t md:border-t-0 pt-3 md:pt-0 border-slate-200/50">
+                          <div className="text-left md:text-right space-y-0.5">
+                            <div className="text-xs font-black text-slate-700 flex items-center gap-1 justify-start md:justify-end">
+                              <Clock className="h-3.5 w-3.5 text-slate-400" />
+                              {lifecycle.formattedTime}
+                            </div>
+                            <p className="text-[9px] text-slate-400">Appointment Slot Time</p>
                           </div>
-                          <p className="text-[9px] text-slate-400">Appointment Slot Time</p>
+                          <div className="flex items-center gap-2">
+                            <Badge className={`${lifecycle.badgeClass} text-[9px] font-bold capitalize px-2.5 py-0.5`}>
+                              {lifecycle.label}
+                            </Badge>
+                            {lifecycle.category === "ready" && (
+                              <Button
+                                size="sm"
+                                onClick={() => navigate(`/dashboard/user/consultations?bookingId=${b._id || b.id}&autoJoin=true`)}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm h-8 px-3"
+                              >
+                                <Video className="h-3.5 w-3.5 mr-1" /> Join Call
+                              </Button>
+                            )}
+                          </div>
                         </div>
-                        <Badge className="mt-2 bg-emerald-50 text-emerald-600 border-none font-bold text-[9px] capitalize px-2 py-0.5">
-                          {b.status || "Confirmed"}
-                        </Badge>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
@@ -417,7 +454,7 @@ const Appointments = () => {
           <Card className="bg-white border-slate-100 shadow-sm rounded-[20px]">
             <CardHeader>
               <CardTitle className="text-base font-extrabold text-slate-800">Visit History</CardTitle>
-              <CardDescription className="text-xs text-slate-400">Overview of completed and cancelled checkups</CardDescription>
+              <CardDescription className="text-xs text-slate-400">Overview of completed, missed and cancelled checkups</CardDescription>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -426,28 +463,29 @@ const Appointments = () => {
                 <p className="text-center py-6 text-xs text-slate-400">No consultation history recorded</p>
               ) : (
                 <div className="divide-y divide-slate-100">
-                  {past.map((b) => (
-                    <div key={b._id || b.id} className="py-4 flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-xs uppercase shrink-0">
-                          {b.doctorId?.name ? b.doctorId.name[0] : "D"}
+                  {past.map((b) => {
+                    const lifecycle = getBookingLifecycle(b);
+                    return (
+                      <div key={b._id || b.id} className="py-4 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <div className="h-9 w-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-xs uppercase shrink-0">
+                            {b.doctorId?.name ? b.doctorId.name[0] : "D"}
+                          </div>
+                          <div>
+                            <h4 className="font-extrabold text-slate-800 text-xs">{b.doctorId?.name || "Medical Practitioner"}</h4>
+                            <span className="text-[9px] text-slate-400 font-medium block">
+                              {lifecycle.formattedTime}
+                            </span>
+                          </div>
                         </div>
-                        <div>
-                          <h4 className="font-extrabold text-slate-800 text-xs">{b.doctorId?.name || "Medical Practitioner"}</h4>
-                          <span className="text-[9px] text-slate-400 font-medium block">
-                            {(() => {
-                              const d = new Date(b.slot || b.slotDate || "");
-                              if (isNaN(d.getTime())) return "Scheduled Time";
-                              return `${d.toLocaleDateString()} at ${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
-                            })()}
-                          </span>
+                        <div className="flex items-center gap-2">
+                          <Badge className={`${lifecycle.badgeClass} text-[8.5px] font-bold px-2 py-0.5`}>
+                            {lifecycle.label}
+                          </Badge>
                         </div>
                       </div>
-                      <Badge className={b.status === "Completed" ? "bg-slate-100 text-slate-600 font-bold border-none text-[8.5px] px-2 py-0.5" : "bg-rose-50 text-[#f2052c] font-bold border-none text-[8.5px] px-2 py-0.5"}>
-                        {b.status || "Completed"}
-                      </Badge>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>

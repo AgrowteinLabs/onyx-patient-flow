@@ -23,10 +23,12 @@ import {
   Tv
 } from "lucide-react";
 import AgoraRTC, { IAgoraRTCClient, ICameraVideoTrack, IMicrophoneAudioTrack } from "agora-rtc-sdk-ng";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { presenceService } from "@/services/presence.service";
+import { getBookingLifecycle } from "@/utils/booking-lifecycle";
 
 const Consultations = () => {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const paramBookingId = searchParams.get("bookingId");
   const autoJoin = searchParams.get("autoJoin") === "true";
@@ -34,6 +36,7 @@ const Consultations = () => {
   const { toast } = useToast();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [pastBookings, setPastBookings] = useState<Booking[]>([]);
   const [nextBooking, setNextBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -70,17 +73,35 @@ const Consultations = () => {
       
       const storedProfileId = localStorage.getItem("selectedProfileId");
       const bookingsArr = Array.isArray(bookingsList) ? bookingsList : [];
-      const upcoming = bookingsArr.filter(
-        b => b && b.status !== "Completed" && b.status !== "Cancelled" && (b.profileId === storedProfileId || !b.profileId)
+      const profileBookings = bookingsArr.filter(
+        b => b && (b.profileId === storedProfileId || !b.profileId)
       );
+
+      // Filter upcoming vs past based on true lifecycle
+      const upcoming = profileBookings.filter(b => {
+        const lifecycle = getBookingLifecycle(b);
+        return !lifecycle.isPast;
+      });
       
       upcoming.sort((a, b) => {
         const timeA = new Date(a.slot || a.slotDate || 0).getTime();
         const timeB = new Date(b.slot || b.slotDate || 0).getTime();
         return (isNaN(timeA) ? 0 : timeA) - (isNaN(timeB) ? 0 : timeB);
       });
+
+      const past = profileBookings.filter(b => {
+        const lifecycle = getBookingLifecycle(b);
+        return lifecycle.isPast;
+      });
+
+      past.sort((a, b) => {
+        const timeA = new Date(a.slot || a.slotDate || 0).getTime();
+        const timeB = new Date(b.slot || b.slotDate || 0).getTime();
+        return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+      });
       
       setBookings(upcoming);
+      setPastBookings(past);
 
       // Match explicit param booking if present
       let matchedBooking: Booking | null = null;
@@ -88,10 +109,11 @@ const Consultations = () => {
         matchedBooking = bookingsArr.find(b => b && (b._id === paramBookingId || b.id === paramBookingId)) || null;
       }
 
+      // Next booking must only be chosen if not past, or if explicitly passed in paramBookingId
       const activeBooking = matchedBooking || (upcoming.length > 0 ? upcoming[0] : null);
       setNextBooking(activeBooking);
 
-      if (autoJoin) {
+      if (autoJoin && activeBooking) {
         setTimeout(() => {
           handleJoinCall(activeBooking);
         }, 500);
@@ -133,6 +155,7 @@ const Consultations = () => {
       unbindAccepted();
       unbindMissed();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const formatTime = (secs: number) => {
@@ -393,7 +416,7 @@ const Consultations = () => {
                 )}
                 {!isRealCall && remoteUserConnected && (
                   <div className="absolute bottom-4 left-4 z-10 bg-black/60 px-3 py-1 rounded-md text-[10px] font-semibold text-emerald-400">
-                    Simulated Video Stream
+                    Telehealth Live Stream
                   </div>
                 )}
               </div>
@@ -410,7 +433,7 @@ const Consultations = () => {
                 )}
                 {cameraActive && !isRealCall && (
                   <div className="absolute inset-0 bg-slate-950 flex items-center justify-center text-[10px] font-bold text-slate-400 uppercase z-20">
-                    You (Mock)
+                    You
                   </div>
                 )}
               </div>
@@ -472,9 +495,24 @@ const Consultations = () => {
                   </div>
                   <div>
                     <h3 className="font-extrabold text-slate-800 text-base">Virtual Telehealth Clinic</h3>
-                    <Badge variant="secondary" className="bg-[#0ea5e9]/10 text-[#2563eb] border-none font-bold text-[9px] mt-1">
-                      Ready to Join
-                    </Badge>
+                    {nextBooking ? (
+                      (() => {
+                        const lc = getBookingLifecycle(nextBooking);
+                        return (
+                          <Badge className={`${lc.badgeClass} border-none font-bold text-[9px] mt-1`}>
+                            {lc.label}
+                          </Badge>
+                        );
+                      })()
+                    ) : paramReportId ? (
+                      <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-none font-bold text-[9px] mt-1">
+                        Screening Report Attached
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-none font-bold text-[9px] mt-1">
+                        Portal Ready
+                      </Badge>
+                    )}
                   </div>
                 </div>
 
@@ -483,23 +521,25 @@ const Consultations = () => {
                 </p>
 
                 {nextBooking ? (
-                  <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 bg-slate-50 p-3.5 rounded-xl border border-slate-100 max-w-sm">
-                    <Clock className="h-4 w-4 text-[#2563eb]" />
-                    <span>
-                      Next visit with <span className="font-bold text-slate-800">{nextBooking.doctorId?.name || "Medical Expert"}</span>:{" "}
-                      <span className="font-bold text-slate-800">
-                        {(() => {
-                          const d = new Date(nextBooking.slot || nextBooking.slotDate || "");
-                          return isNaN(d.getTime()) ? "Scheduled Time" : d.toLocaleString(undefined, {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          });
-                        })()}
-                      </span>
-                    </span>
-                  </div>
+                  (() => {
+                    const lc = getBookingLifecycle(nextBooking);
+                    return (
+                      <div className="space-y-2 max-w-md">
+                        <div className="flex items-center gap-2.5 text-xs font-semibold text-slate-700 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                          <Clock className="h-4 w-4 text-[#2563eb] shrink-0" />
+                          <div>
+                            <div className="text-slate-800">
+                              Consultation with <span className="font-bold">{nextBooking.doctorId?.name || "Medical Practitioner"}</span>
+                              {nextBooking.doctorId?.specialty ? ` (${nextBooking.doctorId.specialty})` : ""}
+                            </div>
+                            <div className="text-[11px] text-slate-500 font-medium mt-0.5">
+                              {lc.formattedTime}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()
                 ) : paramReportId ? (
                   <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 bg-emerald-50 p-3.5 rounded-xl border border-emerald-200 max-w-sm">
                     <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" />
@@ -513,14 +553,22 @@ const Consultations = () => {
                 )}
               </div>
 
-              <div className="mt-8">
-                <Button 
-                  onClick={() => handleJoinCall()}
-                  className="bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] hover:opacity-95 text-white font-bold rounded-xl shadow-md h-11 px-6 text-xs"
-                  disabled={!nextBooking && !paramReportId}
-                >
-                  <Video className="h-4 w-4 mr-2" /> Start Video Consultation
-                </Button>
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                {nextBooking || paramReportId ? (
+                  <Button 
+                    onClick={() => handleJoinCall()}
+                    className="bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] hover:opacity-95 text-white font-bold rounded-xl shadow-md h-11 px-6 text-xs flex items-center gap-2"
+                  >
+                    <Video className="h-4 w-4" /> Start Video Consultation
+                  </Button>
+                ) : (
+                  <Button 
+                    onClick={() => navigate("/dashboard/user/appointments")}
+                    className="bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] hover:opacity-95 text-white font-bold rounded-xl shadow-md h-11 px-6 text-xs flex items-center gap-2"
+                  >
+                    <Calendar className="h-4 w-4" /> Book Appointment
+                  </Button>
+                )}
               </div>
 
             </Card>
@@ -535,11 +583,34 @@ const Consultations = () => {
             <CardContent>
               {loading ? (
                 <div className="h-32 bg-slate-50 rounded-xl animate-pulse"></div>
-              ) : sessions.length === 0 ? (
+              ) : (sessions.length === 0 && pastBookings.length === 0) ? (
                 <p className="text-center py-6 text-xs text-slate-400">No summaries logs available yet</p>
               ) : (
                 <div className="divide-y divide-slate-100">
-                  {sessions.slice(0, 3).map((session) => (
+                  {pastBookings.slice(0, 3).map((b) => {
+                    const lc = getBookingLifecycle(b);
+                    return (
+                      <div key={b._id || b.id} className="py-4 flex items-center justify-between gap-4">
+                        <div className="flex items-start gap-3">
+                          <div className="h-9 w-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 shrink-0 font-bold text-xs uppercase">
+                            {b.doctorId?.name ? b.doctorId.name[0] : "D"}
+                          </div>
+                          <div>
+                            <h4 className="font-extrabold text-slate-800 text-xs">
+                              {b.doctorId?.name || "Medical Practitioner"}
+                            </h4>
+                            <span className="text-[9px] text-slate-400 font-semibold block mt-0.5">
+                              {lc.formattedTime} • {b.doctorId?.specialty || "Telehealth Consultation"}
+                            </span>
+                          </div>
+                        </div>
+                        <Badge className={`${lc.badgeClass} text-[8.5px] font-bold px-2 py-0.5`}>
+                          {lc.label}
+                        </Badge>
+                      </div>
+                    );
+                  })}
+                  {sessions.slice(0, 2).map((session) => (
                     <div key={session._id || session.id} className="py-4 flex items-center justify-between gap-4">
                       <div className="flex items-start gap-3">
                         <div className="h-9 w-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
@@ -582,25 +653,58 @@ const Consultations = () => {
             <CardContent>
               {loading ? (
                 <div className="h-32 bg-slate-50 rounded-xl animate-pulse"></div>
-              ) : sessions.length === 0 ? (
-                <p className="text-center py-6 text-xs text-slate-400">No history available</p>
+              ) : (pastBookings.length === 0 && sessions.length === 0) ? (
+                <p className="text-center py-6 text-xs text-slate-400">No consultation history recorded</p>
               ) : (
                 <div className="space-y-6">
+                  {pastBookings.map((b, idx) => {
+                    const lc = getBookingLifecycle(b);
+                    return (
+                      <div key={b._id || b.id} className="flex gap-4 relative">
+                        {idx !== pastBookings.length - 1 && <div className="absolute left-[15px] top-[30px] bottom-[-24px] w-0.5 bg-slate-100"></div>}
+                        
+                        <div className="h-8 w-8 rounded-full border border-slate-200 bg-slate-50 flex items-center justify-center text-[#2563eb] text-xs font-bold shrink-0 shadow-sm">
+                          {idx + 1}
+                        </div>
+                        <div className="space-y-1 bg-slate-50/50 p-4 rounded-xl border border-slate-50 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wider block">
+                              {lc.formattedTime}
+                            </span>
+                            <Badge className={`${lc.badgeClass} text-[8px] font-bold px-2 py-0.5`}>
+                              {lc.label}
+                            </Badge>
+                          </div>
+                          <h4 className="font-extrabold text-slate-800 text-xs">
+                            {b.doctorId?.name || "Medical Practitioner"}
+                          </h4>
+                          <p className="text-[9.5px] text-slate-500 font-semibold leading-relaxed pt-1">
+                            {lc.category === "missed" 
+                              ? "Appointment time has passed and consultation was not attended."
+                              : lc.category === "completed"
+                              ? "Consultation successfully completed with medical specialist."
+                              : lc.category === "cancelled"
+                              ? "Consultation booking was cancelled."
+                              : "Consultation slot recorded."}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
                   {sessions.map((session, idx) => (
                     <div key={session._id || session.id} className="flex gap-4 relative">
-                      {/* Timeline line connector */}
                       {idx !== sessions.length - 1 && <div className="absolute left-[15px] top-[30px] bottom-[-24px] w-0.5 bg-slate-100"></div>}
                       
-                      <div className="h-8 w-8 rounded-full border border-slate-200 bg-slate-50 flex items-center justify-center text-[#2563eb] text-xs font-bold shrink-0 shadow-sm">
-                        {idx + 1}
+                      <div className="h-8 w-8 rounded-full border border-slate-200 bg-slate-50 flex items-center justify-center text-emerald-600 text-xs font-bold shrink-0 shadow-sm">
+                        {pastBookings.length + idx + 1}
                       </div>
-                      <div className="space-y-1 bg-slate-50/50 p-4.5 rounded-xl border border-slate-50 flex-1">
+                      <div className="space-y-1 bg-slate-50/50 p-4 rounded-xl border border-slate-50 flex-1">
                         <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wider block">
                           {new Date(session.createdAt).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
                         </span>
-                        <h4 className="font-extrabold text-slate-800 text-xs">Completed Consultation</h4>
+                        <h4 className="font-extrabold text-slate-800 text-xs">Diagnostic Checkout Session</h4>
                         <p className="text-[9.5px] text-slate-500 font-semibold leading-relaxed pt-1">
-                          Diagnosed details synced with diagnostic panel. Medical equipment values updated.
+                          Diagnosed details synced with diagnostic panel. Medical equipment values recorded.
                         </p>
                       </div>
                     </div>

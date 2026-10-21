@@ -22,9 +22,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { getProfiles, viewProfile, Profile } from "@/services/profile.service";
-import { listBookings, Booking } from "@/services/booking.service";
+import { listBookings, getPrescription, Booking } from "@/services/booking.service";
 import { listReportsByProfile } from "@/services/report.service";
 import { listSessions, Session } from "@/services/session.service";
+import { getBookingLifecycle } from "@/utils/booking-lifecycle";
 import { useToast } from "@/hooks/use-toast";
 
 const UserDashboard = () => {
@@ -42,6 +43,7 @@ const UserDashboard = () => {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [reports, setReports] = useState<any[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [prescriptions, setPrescriptions] = useState<any[]>([]);
 
   // Load profiles
   const loadProfiles = async () => {
@@ -64,7 +66,6 @@ const UserDashboard = () => {
         }
       } else if (profilesArr.length > 0) {
         // Don't auto-set if we want to show profile selection screen first
-        // But let's set it if they don't want selection screen every time
       }
     } catch (err) {
       console.error("Failed to load profiles:", err);
@@ -87,6 +88,33 @@ const UserDashboard = () => {
         const val = bookingsList.value;
         const filtered = Array.isArray(val) ? val.filter(b => b && (b.profileId === profileId || !b.profileId)) : [];
         setBookings(filtered);
+
+        // Fetch genuine digital prescriptions for user's bookings
+        const rxList: any[] = [];
+        await Promise.all(
+          filtered.slice(0, 10).map(async (b) => {
+            try {
+              const bookingId = b._id || b.id;
+              if (!bookingId) return;
+              const res: any = await getPrescription(bookingId);
+              const rxData = res?.prescription || res?.data || res;
+              if (rxData && (rxData.medications?.length > 0 || rxData.medicines?.length > 0 || rxData.diagnosis)) {
+                const med = rxData.medications?.[0] || (typeof rxData.medicines?.[0] === "string" ? { name: rxData.medicines[0] } : rxData.medicines?.[0]);
+                rxList.push({
+                  id: rxData._id || rxData.id || bookingId,
+                  medicine: med?.name || rxData.diagnosis || "Prescription Record",
+                  dosage: med?.dosage || "As advised",
+                  duration: med?.duration || rxData.duration || "Course",
+                  doctor: rxData.doctorDigitalSignature?.doctorName || b.doctorId?.name || "Consulting Specialist",
+                  date: rxData.createdAt || b.slotDate || new Date().toISOString()
+                });
+              }
+            } catch {
+              // No prescription on this booking
+            }
+          })
+        );
+        setPrescriptions(rxList);
       }
       if (reportsList.status === "fulfilled") {
         const val = reportsList.value;
@@ -192,35 +220,15 @@ const UserDashboard = () => {
   }
 
   // Determine Statistics
-  const upcomingAppointments = bookings.filter(b => b && b.status !== "Completed" && b.status !== "Cancelled");
-  const completedConsultations = bookings.filter(b => b && b.status === "Completed");
+  const upcomingAppointments = bookings.filter(b => {
+    const { isPast } = getBookingLifecycle(b);
+    return !isPast;
+  });
+  const completedConsultations = bookings.filter(b => {
+    const { category } = getBookingLifecycle(b);
+    return category === "completed";
+  });
   const reportsCount = reports.filter(Boolean).length;
-  const prescriptions = [
-    {
-      id: "rx-1",
-      medicine: "Amoxicillin 500mg",
-      dosage: "1 capsule",
-      frequency: "Three times daily",
-      duration: "7 Days",
-      doctor: "Dr. Sarah Jenkins",
-      date: "2026-06-12",
-      refillsLeft: 0,
-      notes: "Take with food. Complete the entire course even if symptoms disappear.",
-      status: "active"
-    },
-    {
-      id: "rx-2",
-      medicine: "Lisinopril 10mg",
-      dosage: "1 tablet",
-      frequency: "Once daily (Morning)",
-      duration: "30 Days",
-      doctor: "Dr. Robert Chen",
-      date: "2026-06-10",
-      refillsLeft: 2,
-      notes: "Avoid potassium supplements unless advised by doctor. Monitor blood pressure.",
-      status: "active"
-    }
-  ];
 
   return (
     <DashboardLayout>
@@ -389,7 +397,7 @@ const UserDashboard = () => {
                 <Badge className="bg-emerald-50 text-emerald-600 border-none font-bold">Done</Badge>
               </div>
               <div className="mt-4">
-                <h3 className="text-2xl font-black text-slate-800">{completedConsultations.length || 3}</h3>
+                <h3 className="text-2xl font-black text-slate-800">{completedConsultations.length}</h3>
                 <p className="text-slate-400 text-[10px] mt-0.5">Total sessions completed</p>
               </div>
             </Card>
@@ -456,34 +464,31 @@ const UserDashboard = () => {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {upcomingAppointments.slice(0, 2).map((booking) => (
-                        <div key={booking._id || booking.id} className="flex items-center justify-between p-4 rounded-xl bg-slate-50 border border-slate-100">
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center text-[#2563eb] font-bold text-sm uppercase">
-                              {booking.doctorId?.name ? booking.doctorId.name[0] : "D"}
+                      {upcomingAppointments.slice(0, 2).map((booking) => {
+                        const lifecycle = getBookingLifecycle(booking);
+                        return (
+                          <div key={booking._id || booking.id} className="flex items-center justify-between p-4 rounded-xl bg-slate-50 border border-slate-100">
+                            <div className="flex items-center gap-3">
+                              <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center text-[#2563eb] font-bold text-sm uppercase">
+                                {booking.doctorId?.name ? booking.doctorId.name[0] : "D"}
+                              </div>
+                              <div>
+                                <h4 className="font-extrabold text-slate-800 text-xs">{booking.doctorId?.name || "Medical Practitioner"}</h4>
+                                <p className="text-[10px] text-slate-400 font-medium capitalize">{booking.doctorId?.specialty || "General Medicine"}</p>
+                              </div>
                             </div>
-                            <div>
-                              <h4 className="font-extrabold text-slate-800 text-xs">{booking.doctorId?.name || "Medical Practitioner"}</h4>
-                              <p className="text-[10px] text-slate-400 font-medium capitalize">{booking.doctorId?.specialty || "General Medicine"}</p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <Badge className="bg-[#0ea5e9]/10 text-[#2563eb] border-none font-bold text-[9px] mb-1">
-                              {(() => {
-                                const d = new Date(booking.slot || booking.slotDate || "");
-                                return isNaN(d.getTime()) ? "Scheduled Date" : d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-                              })()}
-                            </Badge>
-                            <div className="text-[10px] text-slate-500 font-semibold flex items-center justify-end gap-1">
-                              <Clock className="h-3 w-3 text-slate-400" />
-                              {(() => {
-                                const d = new Date(booking.slot || booking.slotDate || "");
-                                return isNaN(d.getTime()) ? "Time" : d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-                              })()}
+                            <div className="text-right">
+                              <Badge className={`${lifecycle.badgeClass} font-bold text-[9px] mb-1`}>
+                                {lifecycle.label}
+                              </Badge>
+                              <div className="text-[10px] text-slate-500 font-semibold flex items-center justify-end gap-1">
+                                <Clock className="h-3 w-3 text-slate-400" />
+                                {lifecycle.formattedTime}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </CardContent>
@@ -507,10 +512,20 @@ const UserDashboard = () => {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {prescriptions.length === 0 ? (
-                    <p className="text-center py-6 text-xs text-slate-400">No active prescriptions found</p>
+                    <div className="text-center py-8 bg-slate-50/50 rounded-2xl border border-slate-100">
+                      <p className="text-xs text-slate-400 font-semibold">No active prescriptions on record</p>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        className="mt-3 text-xs font-bold border-slate-200 text-[#2563eb]"
+                        onClick={() => navigate("/dashboard/user/prescriptions")}
+                      >
+                        View Prescriptions
+                      </Button>
+                    </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {prescriptions.map((p: any) => (
+                      {prescriptions.slice(0, 4).map((p: any) => (
                         <div key={p.id} className="p-4 rounded-xl border border-slate-100 bg-slate-50 flex items-start gap-3">
                           <div className="h-9 w-9 rounded-lg bg-rose-50 text-[#f2052c] flex items-center justify-center shrink-0">
                             <Pill className="h-4.5 w-4.5" />
