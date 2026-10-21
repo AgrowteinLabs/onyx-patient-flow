@@ -34,6 +34,27 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { presenceService } from "@/services/presence.service";
 import { getBookingLifecycle } from "@/utils/booking-lifecycle";
 
+const loadRazorpayScript = () => {
+  return new Promise((resolve) => {
+    if ((window as any).Razorpay) {
+      resolve(true);
+      return;
+    }
+    const existingScript = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
+    if (existingScript) {
+      existingScript.addEventListener("load", () => resolve(true));
+      existingScript.addEventListener("error", () => resolve(false));
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+};
+
 const Consultations = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -508,6 +529,7 @@ const Consultations = () => {
       };
 
       toast({ title: "Initiating direct consultation..." });
+      await loadRazorpayScript();
 
       let createdBooking: Booking | null = null;
       let targetBookingId = `instant-${docId}-${Date.now()}`;
@@ -537,14 +559,34 @@ const Consultations = () => {
           return;
         }
 
-        if (response && (response.booking || response._id || response.id)) {
+        if (response && (response.booking || response._id || response.id || response.bookingId)) {
           createdBooking = response.booking || response;
-          targetBookingId = response.booking?._id || response.booking?.id || response._id || response.id || targetBookingId;
+          targetBookingId = response.bookingId || response.booking?._id || response.booking?.id || response._id || response.id || targetBookingId;
         }
 
-        const razorpayOrderId = response?.razorpayOrderId || response?.order?.id || response?.booking?.razorpayOrderId;
-        const rzpKey = response?.key || response?.razorpayKey || "rzp_live_SSEMZ6dhpfXToh";
-        const calcAmount = response.amount || response.order?.amount || response.booking?.amountPaise || response.booking?.amount || 50000;
+        const razorpayOrderId = 
+          response?.razorpayOrderId || 
+          response?.paymentOrderId || 
+          response?.orderId || 
+          response?.order_id || 
+          response?.order?.id || 
+          response?.booking?.razorpayOrderId || 
+          response?.booking?.paymentOrderId;
+
+        const rzpKey = 
+          response?.key || 
+          response?.keyId || 
+          response?.key_id || 
+          response?.razorpayKey || 
+          "rzp_live_SSEMZ6dhpfXToh";
+
+        const calcAmount = 
+          response?.amountPaise || 
+          response?.amount || 
+          response?.order?.amount || 
+          response?.booking?.amountPaise || 
+          response?.booking?.amount || 
+          50000;
 
         console.log("[Instant Booking Flow] Payment Parameters - razorpayOrderId:", razorpayOrderId, "rzpKey:", rzpKey, "amount:", calcAmount);
 
@@ -1306,9 +1348,14 @@ const Consultations = () => {
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
             {/* 1. Doctor Selector */}
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                <User className="h-3.5 w-3.5 text-[#2563eb]" /> Select Specialist *
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <User className="h-3.5 w-3.5 text-[#2563eb]" /> Select Specialist *
+                </label>
+                <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                  Select verified doctor
+                </span>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-48 overflow-y-auto pr-1">
                 {doctors.map((doc) => {
