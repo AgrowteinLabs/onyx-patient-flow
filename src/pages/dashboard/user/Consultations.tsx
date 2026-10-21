@@ -528,52 +528,15 @@ const Consultations = () => {
       const docId = instantDoctor._id || instantDoctor.id || "";
       const profileId = localStorage.getItem("selectedProfileId") || undefined;
       
-      toast({ title: "Checking doctor availability & setting up consultation..." });
+      toast({ title: "Connecting instant consultation..." });
 
-      // 1. Background Appointment Setup: Look up doctor's verified availability slots
+      // 1. Instant Timing: Current timestamp right now
       const now = new Date();
       const pad = (n: number) => n.toString().padStart(2, "0");
-      
-      const datesToCheck: string[] = [];
-      for (let i = 0; i < 7; i++) {
-        const d = new Date(now);
-        d.setDate(now.getDate() + i);
-        datesToCheck.push(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
-      }
-
-      let chosenSlotDate = datesToCheck[0];
-      let chosenSlotStart = "10:00";
-      let chosenSlotEnd = "10:30";
-      let slotFound = false;
-
-      for (const dateStr of datesToCheck) {
-        try {
-          const slots: DoctorSlot[] = await getDoctorAvailability(docId, dateStr);
-          if (Array.isArray(slots) && slots.length > 0) {
-            const validSlot = slots.find((s) => !s.isBooked && !isSlotPast(dateStr, s.startTime));
-            if (validSlot) {
-              chosenSlotDate = dateStr;
-              chosenSlotStart = validSlot.startTime;
-              chosenSlotEnd = validSlot.endTime;
-              slotFound = true;
-              console.log("[Instant Consultation Flow] Found verified slot in doctor schedule:", chosenSlotDate, chosenSlotStart, chosenSlotEnd);
-              break;
-            }
-          }
-        } catch (err) {
-          console.warn("[Instant Consultation Flow] Doctor availability check note for date:", dateStr, err);
-        }
-      }
-
-      if (!slotFound) {
-        // Fallback to tomorrow with standard slot if today has passed
-        const tomorrow = new Date(now);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        chosenSlotDate = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`;
-        chosenSlotStart = "10:00";
-        chosenSlotEnd = "10:30";
-        console.log("[Instant Consultation Flow] Using fallback appointment slot:", chosenSlotDate, chosenSlotStart, chosenSlotEnd);
-      }
+      const slotDate = now.toISOString();
+      const slotTimeStart = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+      const endD = new Date(now.getTime() + 30 * 60 * 1000);
+      const slotTimeEnd = `${pad(endD.getHours())}:${pad(endD.getMinutes())}`;
 
       // 2. Prepare report sharing payload (ABDM & NMC guidelines)
       const reportSharingPayload = {
@@ -587,25 +550,28 @@ const Consultations = () => {
 
       await loadRazorpayScript();
 
-      // 3. Create booking with verified appointment schema (matches Appointments.tsx)
-      console.log("[Instant Consultation Flow] Calling createBooking with background appointment setup:", {
-        docId,
-        slotDate: chosenSlotDate,
-        slotTimeStart: chosenSlotStart,
-        slotTimeEnd: chosenSlotEnd,
-        type: "scheduled"
-      });
-
-      const response: any = await createBooking(docId, {
-        slotDate: chosenSlotDate,
-        slotTimeStart: chosenSlotStart,
-        slotTimeEnd: chosenSlotEnd,
+      // 3. Create instant booking with real-time payload (matches handover spec Section 3.3)
+      const bookingPayload: any = {
+        slotDate,
+        slotTimeStart,
+        slotTimeEnd,
         profileId,
-        type: "scheduled",
+        type: "instant",
         reportSharing: reportSharingPayload,
         shareMedicalHistory: instantReportScope === "all",
         selectedReportIds: instantReportScope === "selected" ? instantSelectedReportIds : [],
-      }, profileId);
+      };
+
+      if (paramReportId || (instantSelectedReportIds.length > 0 && instantSelectedReportIds[0])) {
+        bookingPayload.reportId = paramReportId || instantSelectedReportIds[0];
+      }
+
+      console.log("[Instant Consultation Flow] Creating instant booking with real-time parameters:", {
+        docId,
+        ...bookingPayload
+      });
+
+      const response: any = await createBooking(docId, bookingPayload, profileId);
 
       console.log("[Instant Consultation Flow] createBooking API Response received:", response);
 
@@ -697,9 +663,9 @@ const Consultations = () => {
                   specialty: instantDoctor.specialty,
                   photo: instantDoctor.photo,
                 },
-                slot: chosenSlotDate,
+                slot: slotDate,
                 status: "confirmed",
-                type: "scheduled",
+                type: "instant",
                 profileId,
               };
 
@@ -757,9 +723,9 @@ const Consultations = () => {
           specialty: instantDoctor.specialty,
           photo: instantDoctor.photo,
         },
-        slot: chosenSlotDate,
+        slot: slotDate,
         status: "confirmed",
-        type: "scheduled",
+        type: "instant",
         profileId,
       };
 
