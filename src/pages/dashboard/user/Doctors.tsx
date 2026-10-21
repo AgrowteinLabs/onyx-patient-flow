@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,7 +26,8 @@ import {
   RefreshCcw,
   ChevronRight,
   FileText,
-  Lock
+  Lock,
+  Zap
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
@@ -55,6 +57,7 @@ const loadRazorpayScript = () => {
 };
 
 const Doctors = () => {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [filteredDoctors, setFilteredDoctors] = useState<Doctor[]>([]);
@@ -457,12 +460,21 @@ const Doctors = () => {
                   </div>
                 </div>
 
-                <Button 
-                  onClick={() => handleOpenBooking(doc)}
-                  className="w-full text-xs font-bold bg-[#2563eb] text-white rounded-xl shadow-md h-10 mt-2 hover:opacity-95"
-                >
-                  Book Appointment
-                </Button>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  <Button 
+                    onClick={() => navigate(`/dashboard/user/consultations?doctorId=${doc._id || doc.id}&direct=true`)}
+                    className="w-full text-xs font-bold bg-gradient-to-r from-emerald-500 to-teal-600 hover:opacity-95 text-white rounded-xl shadow-xs h-10 flex items-center justify-center gap-1.5"
+                  >
+                    <Zap className="h-3.5 w-3.5 fill-white text-white" /> Instant Call
+                  </Button>
+                  <Button 
+                    onClick={() => handleOpenBooking(doc)}
+                    variant="outline"
+                    className="w-full text-xs font-bold border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl shadow-xs h-10 flex items-center justify-center gap-1.5"
+                  >
+                    <Calendar className="h-3.5 w-3.5 text-[#2563eb]" /> Book Slot
+                  </Button>
+                </div>
 
               </CardContent>
             </Card>

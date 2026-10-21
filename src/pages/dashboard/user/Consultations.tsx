@@ -5,7 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { listSessions, Session } from "@/services/session.service";
-import { listBookings, Booking } from "@/services/booking.service";
+import { listBookings, createBooking, Booking } from "@/services/booking.service";
+import { listDoctors, Doctor } from "@/services/doctor.service";
+import { listReportsByProfile } from "@/services/report.service";
 import { apiRequest } from "@/lib/api-request";
 import { 
   Video, 
@@ -20,7 +22,12 @@ import {
   AlertCircle, 
   Paperclip,
   CheckCircle2,
-  Tv
+  Tv,
+  Zap,
+  PhoneCall,
+  ShieldCheck,
+  FileText,
+  Lock
 } from "lucide-react";
 import AgoraRTC, { IAgoraRTCClient, ICameraVideoTrack, IMicrophoneAudioTrack } from "agora-rtc-sdk-ng";
 import { useSearchParams, useNavigate } from "react-router-dom";
@@ -39,6 +46,18 @@ const Consultations = () => {
   const [pastBookings, setPastBookings] = useState<Booking[]>([]);
   const [nextBooking, setNextBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Instant Direct Consultation state (No Appointment Needed)
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [availableReports, setAvailableReports] = useState<any[]>([]);
+  const [openInstantModal, setOpenInstantModal] = useState(false);
+  const [instantDoctor, setInstantDoctor] = useState<Doctor | null>(null);
+  const [instantReportScope, setInstantReportScope] = useState<"all" | "selected" | "none">("all");
+  const [instantSelectedReportIds, setInstantSelectedReportIds] = useState<string[]>(() => {
+    return paramReportId ? [paramReportId] : [];
+  });
+  const [instantConsentGranted, setInstantConsentGranted] = useState(true);
+  const [instantCallStarting, setInstantCallStarting] = useState(false);
 
   // Video Consultation states
   const [inVideoCall, setInVideoCall] = useState(false);
@@ -60,18 +79,44 @@ const Consultations = () => {
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [openDetailDialog, setOpenDetailDialog] = useState(false);
 
+  const paramDoctorId = searchParams.get("doctorId");
+  const directConsult = searchParams.get("direct") === "true";
+
   const loadData = async () => {
     try {
       setLoading(true);
-      const [sessionsData, bookingsList] = await Promise.all([
+      const [sessionsData, bookingsList, doctorsList] = await Promise.all([
         listSessions("Completed").catch(() => []),
-        listBookings().catch(() => [])
+        listBookings().catch(() => []),
+        listDoctors().catch(() => [])
       ]);
       
       const sessionsArr = Array.isArray(sessionsData) ? sessionsData : [];
       setSessions(sessionsArr);
+
+      const docs = doctorsList || [];
+      setDoctors(docs);
+      if (paramDoctorId) {
+        const found = docs.find(d => (d._id || d.id) === paramDoctorId);
+        if (found) {
+          setInstantDoctor(found);
+          if (directConsult) {
+            setOpenInstantModal(true);
+          }
+        } else if (docs.length > 0) {
+          setInstantDoctor(docs[0]);
+        }
+      } else if (docs.length > 0) {
+        setInstantDoctor(prev => prev || docs[0]);
+      }
       
       const storedProfileId = localStorage.getItem("selectedProfileId");
+      if (storedProfileId) {
+        listReportsByProfile(storedProfileId).then((reps) => {
+          setAvailableReports(Array.isArray(reps) ? reps : []);
+        }).catch(() => {});
+      }
+
       const bookingsArr = Array.isArray(bookingsList) ? bookingsList : [];
       const profileBookings = bookingsArr.filter(
         b => b && (b.profileId === storedProfileId || !b.profileId)
@@ -258,11 +303,102 @@ const Consultations = () => {
     }
   };
 
+  const handleStartInstantCall = async () => {
+    if (!instantDoctor) {
+      toast({ title: "Please select a specialist doctor to consult with.", variant: "destructive" });
+      return;
+    }
+    if (instantReportScope !== "none" && !instantConsentGranted) {
+      toast({ title: "Please grant consent to share your selected diagnostic records.", variant: "destructive" });
+      return;
+    }
+
+    try {
+      setInstantCallStarting(true);
+      const docId = instantDoctor._id || instantDoctor.id || "";
+      const profileId = localStorage.getItem("selectedProfileId") || undefined;
+      
+      const now = new Date();
+      const pad = (n: number) => n.toString().padStart(2, "0");
+      const slotDate = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+      const slotTimeStart = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+      const endD = new Date(now.getTime() + 30 * 60 * 1000);
+      const slotTimeEnd = `${pad(endD.getHours())}:${pad(endD.getMinutes())}`;
+
+      const reportSharingPayload = {
+        scope: instantReportScope,
+        selectedReportIds: instantReportScope === "selected" ? instantSelectedReportIds : [],
+        patientConsent: {
+          granted: instantReportScope !== "none" ? instantConsentGranted : false,
+          purpose: "Instant Telehealth Consultation & Clinical Evaluation"
+        }
+      };
+
+      toast({ title: "Initiating direct consultation..." });
+
+      let createdBooking: Booking | null = null;
+      try {
+        const response = await createBooking(docId, {
+          slotDate,
+          slotTimeStart,
+          slotTimeEnd,
+          profileId,
+          type: "instant",
+          reportSharing: reportSharingPayload,
+          shareMedicalHistory: instantReportScope === "all",
+          selectedReportIds: instantReportScope === "selected" ? instantSelectedReportIds : [],
+        }, profileId);
+
+        if (response && (response.booking || response._id || response.id)) {
+          createdBooking = response.booking || response;
+        }
+      } catch (err) {
+        console.warn("Direct booking API fallback to instant telehealth session:", err);
+      }
+
+      setOpenInstantModal(false);
+      
+      const targetBookingId = createdBooking?._id || createdBooking?.id || `instant-${docId}-${Date.now()}`;
+      
+      const instantBookingObj: Booking = createdBooking || {
+        _id: targetBookingId,
+        id: targetBookingId,
+        doctorId: {
+          _id: docId,
+          name: instantDoctor.name,
+          specialty: instantDoctor.specialty,
+        },
+        slot: slotDate,
+        status: "in-progress",
+        type: "instant",
+      };
+
+      setNextBooking(instantBookingObj);
+      await handleJoinCall(instantBookingObj);
+
+    } catch (err: any) {
+      console.error("Instant call creation failed:", err);
+      toast({ title: err?.message || "Failed to start direct consultation", variant: "destructive" });
+    } finally {
+      setInstantCallStarting(false);
+    }
+  };
+
   const handleJoinCall = async (bookingOverride?: Booking | null) => {
     try {
       const b = bookingOverride || nextBooking;
       const targetBookingId = b?._id || b?.id || paramBookingId || (paramReportId ? `report-${paramReportId}` : "instant-telehealth-session");
       const targetDoctorId = b?.doctorId?._id || (typeof b?.doctorId === "string" ? b.doctorId : undefined);
+
+      let patientName = localStorage.getItem("userName");
+      if (!patientName) {
+        try {
+          const u = JSON.parse(localStorage.getItem("user") || "{}");
+          patientName = u.name || u.phone_number || "Patient";
+        } catch {
+          patientName = "Patient";
+        }
+      }
 
       toast({ title: "Connecting to telehealth consultation room..." });
 
@@ -270,7 +406,7 @@ const Consultations = () => {
       presenceService.notifyDoctorIncomingCall({
         bookingId: targetBookingId,
         doctorId: targetDoctorId,
-        patientName: localStorage.getItem("userName") || "Patient",
+        patientName: patientName || "Patient",
         reportId: paramReportId || undefined,
         reason: "Telehealth Video Consultation",
         type: "instant",
@@ -517,7 +653,7 @@ const Consultations = () => {
                 </div>
 
                 <p className="text-slate-500 text-xs leading-relaxed max-w-md">
-                  Consult with your medical expert in a secure, HIPAA-compliant video session. Click the button below when your slot is ready to connect.
+                  Consult with your medical expert in a secure, HIPAA-compliant video session. Connect directly with an on-duty doctor on-demand or join your scheduled visit.
                 </p>
 
                 {nextBooking ? (
@@ -529,7 +665,7 @@ const Consultations = () => {
                           <Clock className="h-4 w-4 text-[#2563eb] shrink-0" />
                           <div>
                             <div className="text-slate-800">
-                              Consultation with <span className="font-bold">{nextBooking.doctorId?.name || "Medical Practitioner"}</span>
+                              Upcoming visit with <span className="font-bold">{nextBooking.doctorId?.name || "Medical Practitioner"}</span>
                               {nextBooking.doctorId?.specialty ? ` (${nextBooking.doctorId.specialty})` : ""}
                             </div>
                             <div className="text-[11px] text-slate-500 font-medium mt-0.5">
@@ -546,27 +682,37 @@ const Consultations = () => {
                     <span>Screening Report Linked (#{paramReportId.slice(-6)}). Telehealth room ready.</span>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 bg-slate-50 p-3.5 rounded-xl border border-slate-100 max-w-sm">
-                    <Clock className="h-4 w-4 text-[#2563eb]" />
-                    <span>No upcoming telehealth appointments scheduled.</span>
+                  <div className="flex items-center gap-2 text-xs font-semibold text-emerald-800 bg-emerald-50/80 p-3.5 rounded-xl border border-emerald-200/80 max-w-sm">
+                    <Zap className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                    <span>No wait needed! On-demand direct doctor consultation available right now.</span>
                   </div>
                 )}
               </div>
 
+              {/* Action Buttons */}
               <div className="mt-8 flex flex-wrap items-center gap-3">
-                {nextBooking || paramReportId ? (
+                <Button 
+                  onClick={() => setOpenInstantModal(true)}
+                  className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:opacity-95 text-white font-bold rounded-xl shadow-md h-11 px-6 text-xs flex items-center gap-2"
+                >
+                  <Zap className="h-4 w-4 fill-white text-white" /> Consult Doctor Now (Direct / Instant)
+                </Button>
+
+                {nextBooking ? (
                   <Button 
                     onClick={() => handleJoinCall()}
-                    className="bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] hover:opacity-95 text-white font-bold rounded-xl shadow-md h-11 px-6 text-xs flex items-center gap-2"
+                    variant="outline"
+                    className="border-slate-200 text-slate-700 hover:bg-slate-50 font-bold rounded-xl shadow-xs h-11 px-5 text-xs flex items-center gap-2"
                   >
-                    <Video className="h-4 w-4" /> Start Video Consultation
+                    <Video className="h-4 w-4 text-[#2563eb]" /> Join Scheduled Visit
                   </Button>
                 ) : (
                   <Button 
                     onClick={() => navigate("/dashboard/user/appointments")}
-                    className="bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] hover:opacity-95 text-white font-bold rounded-xl shadow-md h-11 px-6 text-xs flex items-center gap-2"
+                    variant="outline"
+                    className="border-slate-200 text-slate-700 hover:bg-slate-50 font-bold rounded-xl shadow-xs h-11 px-5 text-xs flex items-center gap-2"
                   >
-                    <Calendar className="h-4 w-4" /> Book Appointment
+                    <Calendar className="h-4 w-4 text-[#2563eb]" /> Schedule For Later
                   </Button>
                 )}
               </div>
@@ -767,6 +913,261 @@ const Consultations = () => {
               </DialogFooter>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Instant Direct Consultation Dialog */}
+      <Dialog open={openInstantModal} onOpenChange={setOpenInstantModal}>
+        <DialogContent className="sm:max-w-xl md:max-w-2xl p-0 overflow-hidden rounded-[26px] border border-slate-100 shadow-2xl bg-white max-h-[92vh] flex flex-col">
+          {/* Top accent gradient */}
+          <div className="h-1.5 w-full bg-gradient-to-r from-emerald-400 via-teal-500 to-[#2563eb]" />
+
+          {/* Header */}
+          <div className="px-6 pt-5 pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2 mb-1">
+              <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[9px] uppercase tracking-wider px-2 py-0.5 flex items-center gap-1">
+                <Zap className="h-2.5 w-2.5 fill-emerald-600" /> Direct / Instant Consultation
+              </Badge>
+              <span className="text-[11px] text-slate-400 font-medium">No Appointment Needed</span>
+            </div>
+            <DialogTitle className="text-xl font-black text-slate-800 tracking-tight">
+              Connect Directly with a Doctor
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Initiate an instant telehealth video call. The doctor will receive a live ring notification immediately.
+            </DialogDescription>
+          </div>
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+            {/* 1. Doctor Selector */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                <User className="h-3.5 w-3.5 text-[#2563eb]" /> Select Specialist *
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-48 overflow-y-auto pr-1">
+                {doctors.map((doc) => {
+                  const docId = doc._id || doc.id;
+                  const isSelected = (instantDoctor?._id || instantDoctor?.id) === docId;
+                  return (
+                    <div
+                      key={docId}
+                      onClick={() => setInstantDoctor(doc)}
+                      className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center gap-3 ${
+                        isSelected
+                          ? "bg-emerald-50/70 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs"
+                          : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="h-10 w-10 rounded-full bg-emerald-500/10 text-emerald-700 font-black text-sm flex items-center justify-center shrink-0">
+                        {doc.name[0]}
+                      </div>
+                      <div className="overflow-hidden flex-1">
+                        <h4 className="text-xs font-extrabold text-slate-800 truncate">{doc.name}</h4>
+                        <p className="text-[10px] text-slate-500 font-medium capitalize truncate">{doc.specialty}</p>
+                        <div className="flex items-center gap-1 text-[9px] text-amber-500 font-bold mt-0.5">
+                          <span>★ {doc.rating || "4.8"}</span>
+                          <span className="text-slate-300">•</span>
+                          <span className="text-slate-400 font-semibold">{doc.experience || "10+ Yrs"}</span>
+                        </div>
+                      </div>
+                      {isSelected && <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 2. Medical History & Report Sharing (ABDM & NMC) */}
+            <div className="space-y-3 pt-3 border-t border-slate-100">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <FileText className="h-3.5 w-3.5 text-[#2563eb]" /> Medical History & Report Sharing *
+                </label>
+                <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[8.5px] px-2 py-0.5 w-fit">
+                  ABDM & NMC Compliant
+                </Badge>
+              </div>
+
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                Choose which diagnostic screening reports you want to securely share with {instantDoctor ? `Dr. ${instantDoctor.name}` : "the doctor"} during this instant visit.
+              </p>
+
+              {/* Scope cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div
+                  onClick={() => setInstantReportScope("all")}
+                  className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                    instantReportScope === "all"
+                      ? "bg-emerald-50/70 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs"
+                      : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className={`text-xs font-extrabold ${instantReportScope === "all" ? "text-emerald-700" : "text-slate-800"}`}>
+                        Full History
+                      </span>
+                      <Badge className="bg-emerald-100 text-emerald-800 text-[8px] font-bold border-none px-1 py-0">
+                        Recommended
+                      </Badge>
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-normal">
+                      Share all diagnostic screening reports with the doctor.
+                    </p>
+                  </div>
+                </div>
+
+                <div
+                  onClick={() => setInstantReportScope("selected")}
+                  className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                    instantReportScope === "selected"
+                      ? "bg-emerald-50/70 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs"
+                      : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className={`text-xs font-extrabold ${instantReportScope === "selected" ? "text-emerald-700" : "text-slate-800"}`}>
+                        Select Reports
+                      </span>
+                      {instantSelectedReportIds.length > 0 && (
+                        <Badge className="bg-emerald-600 text-white text-[8px] font-bold border-none px-1.5 py-0">
+                          {instantSelectedReportIds.length} picked
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-normal">
+                      Pick only specific reports to share with the doctor.
+                    </p>
+                  </div>
+                </div>
+
+                <div
+                  onClick={() => setInstantReportScope("none")}
+                  className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                    instantReportScope === "none"
+                      ? "bg-emerald-50/70 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs"
+                      : "bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className={`text-xs font-extrabold ${instantReportScope === "none" ? "text-emerald-700" : "text-slate-800"}`}>
+                        Do Not Share
+                      </span>
+                      <Lock className="h-3 w-3 text-slate-400" />
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-normal">
+                      Connect without sharing diagnostic reports.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sub-list of reports when 'selected' */}
+              {instantReportScope === "selected" && (
+                <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-2 animate-fadeIn">
+                  <span className="text-[10.5px] font-bold text-slate-700 uppercase tracking-wider block">
+                    Available Reports ({availableReports.length})
+                  </span>
+                  {availableReports.length === 0 ? (
+                    <p className="text-xs text-slate-400 py-2">No uploaded reports found for this profile.</p>
+                  ) : (
+                    <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                      {availableReports.map((rep) => {
+                        const repId = rep._id || rep.id;
+                        const isChecked = instantSelectedReportIds.includes(repId);
+                        return (
+                          <label
+                            key={repId}
+                            className={`flex items-center justify-between p-2 rounded-lg border text-xs cursor-pointer transition-all ${
+                              isChecked
+                                ? "bg-emerald-50 border-emerald-200 text-emerald-950 font-semibold"
+                                : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setInstantSelectedReportIds([...instantSelectedReportIds, repId]);
+                                  } else {
+                                    setInstantSelectedReportIds(instantSelectedReportIds.filter(id => id !== repId));
+                                  }
+                                }}
+                                className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5"
+                              />
+                              <span className="truncate">{rep.reportCode || rep.name || `Report #${repId.slice(-6)}`}</span>
+                            </div>
+                            <span className="text-[10px] text-slate-400 shrink-0">
+                              {new Date(rep.createdAt || Date.now()).toLocaleDateString()}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Consent Checkbox */}
+              {instantReportScope !== "none" && instantDoctor && (
+                <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200/70 flex items-start gap-2.5">
+                  <input
+                    type="checkbox"
+                    id="instant-consult-consent"
+                    checked={instantConsentGranted}
+                    onChange={(e) => setInstantConsentGranted(e.target.checked)}
+                    className="mt-0.5 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4 shrink-0"
+                  />
+                  <label htmlFor="instant-consult-consent" className="text-[11px] text-emerald-950 font-medium leading-relaxed cursor-pointer">
+                    <span className="font-bold">Patient Consent Declaration:</span> I hereby grant consent to <span className="font-bold">Dr. {instantDoctor.name}</span> to access my {instantReportScope === "all" ? "complete medical history and diagnostic reports" : `${instantSelectedReportIds.length} selected report(s)`} strictly for the purpose of <span className="font-bold">Instant Telehealth Consultation & Clinical Evaluation</span> under NMC Telemedicine Practice Guidelines.
+                  </label>
+                </div>
+              )}
+            </div>
+
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-4 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
+              <ShieldCheck className="h-4 w-4 text-emerald-500" />
+              <span>Direct, end-to-end encrypted video call</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-xl border-slate-200 text-slate-600 font-bold text-xs h-10 px-4 hover:bg-slate-100"
+                onClick={() => setOpenInstantModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleStartInstantCall}
+                disabled={instantCallStarting || !instantDoctor || (instantReportScope !== "none" && !instantConsentGranted)}
+                className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:opacity-95 text-white font-bold rounded-xl shadow-md h-10 px-5 text-xs flex items-center gap-2"
+              >
+                {instantCallStarting ? (
+                  <>
+                    <RefreshCcw className="h-3.5 w-3.5 animate-spin" />
+                    <span>Connecting Doctor...</span>
+                  </>
+                ) : (
+                  <>
+                    <PhoneCall className="h-4 w-4" />
+                    <span>Start Direct Call Now</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
