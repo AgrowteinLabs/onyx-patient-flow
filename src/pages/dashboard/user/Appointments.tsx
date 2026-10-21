@@ -297,6 +297,20 @@ const Appointments = () => {
         throw new Error("Failed to get booking reference.");
       }
 
+      // Branch for Demo Mode (Backend has APP_ENV=dev and DEMO_FREE_CONSULTATIONS=true)
+      const isDemoPayment = response?.demoPayment === true || response?.data?.demoPayment === true;
+      if (isDemoPayment) {
+        console.log("[Booking Flow] Demo Mode Active (demoPayment: true): Skipping Razorpay Checkout entirely.");
+        toast({
+          title: "Appointment Booked (Demo Mode)!",
+          description: "Your appointment has been successfully scheduled and confirmed."
+        });
+        setOpenBookModal(false);
+        setBookingLoading(false);
+        loadData();
+        return;
+      }
+
       // 2. Initialize Razorpay Checkout
       const razorpayOrderId = response.razorpayOrderId || response.order?.id || response.booking?.razorpayOrderId;
       const rzpKey = response.key || response.razorpayKey || "rzp_live_SSEMZ6dhpfXToh";
