@@ -524,13 +524,29 @@ const Consultations = () => {
           selectedReportIds: instantReportScope === "selected" ? instantSelectedReportIds : [],
         }, profileId);
 
+        console.log("[Instant Booking Flow] createBooking API Response received:", response);
+
+        if (response && response.error && !response.booking) {
+          console.error("[Instant Booking Flow] createBooking returned an error:", response.error);
+          toast({ 
+            title: response.error?.description || response.error?.message || "Doctor Settlement Account Inactive",
+            description: "The selected specialist cannot accept payments at this time. Please select another doctor or book a scheduled slot.",
+            variant: "destructive" 
+          });
+          setInstantCallStarting(false);
+          return;
+        }
+
         if (response && (response.booking || response._id || response.id)) {
           createdBooking = response.booking || response;
-          targetBookingId = createdBooking?._id || createdBooking?.id || targetBookingId;
+          targetBookingId = response.booking?._id || response.booking?.id || response._id || response.id || targetBookingId;
         }
 
         const razorpayOrderId = response?.razorpayOrderId || response?.order?.id || response?.booking?.razorpayOrderId;
         const rzpKey = response?.key || response?.razorpayKey || "rzp_live_SSEMZ6dhpfXToh";
+        const calcAmount = response.amount || response.order?.amount || response.booking?.amountPaise || response.booking?.amount || 50000;
+
+        console.log("[Instant Booking Flow] Payment Parameters - razorpayOrderId:", razorpayOrderId, "rzpKey:", rzpKey, "amount:", calcAmount);
 
         // If backend initiated a Razorpay payment order for this consultation
         if (razorpayOrderId && (window as any).Razorpay) {
@@ -548,12 +564,13 @@ const Consultations = () => {
 
           const options = {
             key: rzpKey,
-            amount: response.amount || response.order?.amount || response.booking?.amountPaise || 50000,
+            amount: calcAmount,
             currency: response.currency || response.order?.currency || "INR",
             name: "Onyx Health Plus",
-            description: "Instant Telehealth Consultation",
+            description: "Doctor Consultation Booking",
             order_id: razorpayOrderId,
             handler: async function (paymentRes: any) {
+              console.log("[Instant Booking Flow] Payment successful. Payment ID:", paymentRes.razorpay_payment_id, "Order ID:", paymentRes.razorpay_order_id);
               try {
                 toast({ title: "Confirming consultation booking..." });
                 await confirmBooking({
@@ -583,7 +600,7 @@ const Consultations = () => {
                 setNextBooking(confirmedBooking);
                 await handleJoinCall(confirmedBooking);
               } catch (confirmErr: any) {
-                console.error("Payment confirmation failed:", confirmErr);
+                console.error("[Instant Booking Flow] Backend confirmation failed:", confirmErr);
                 toast({ title: confirmErr.message || "Failed to confirm consultation on backend", variant: "destructive" });
               } finally {
                 setInstantCallStarting(false);
@@ -598,6 +615,7 @@ const Consultations = () => {
             },
             modal: {
               ondismiss: function () {
+                console.log("[Instant Booking Flow] Checkout dismissed by user.");
                 toast({ title: "Consultation payment cancelled", variant: "destructive" });
                 setInstantCallStarting(false);
               }
@@ -605,12 +623,24 @@ const Consultations = () => {
           };
 
           const rzp = new (window as any).Razorpay(options);
+
+          rzp.on("payment.failed", function (failRes: any) {
+            console.error("[Instant Booking Flow] Razorpay payment failed:", failRes?.error);
+            const errDesc = failRes?.error?.description || failRes?.error?.reason || "Payment was declined by bank or UPI app.";
+            toast({
+              title: "Payment Failed",
+              description: errDesc,
+              variant: "destructive",
+            });
+            setInstantCallStarting(false);
+          });
+
           rzp.open();
           return;
         }
 
       } catch (err) {
-        console.warn("Direct booking API fallback to instant telehealth session:", err);
+        console.warn("[Instant Booking Flow] Direct booking API fallback:", err);
       }
 
       setOpenInstantModal(false);
