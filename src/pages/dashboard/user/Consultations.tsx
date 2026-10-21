@@ -732,6 +732,37 @@ const Consultations = () => {
         throw new Error("Failed to get booking reference from server.");
       }
 
+      // 4. Branch for Demo Mode (Backend has APP_ENV=dev and DEMO_FREE_CONSULTATIONS=true)
+      const isDemoPayment = response?.demoPayment === true || response?.data?.demoPayment === true;
+      if (isDemoPayment) {
+        console.log("[Instant Consultation Flow] Demo Mode Active (demoPayment: true): Skipping Razorpay Checkout entirely.");
+        setOpenInstantModal(false);
+        toast({
+          title: "Instant Consultation Activated (Demo Mode)",
+          description: `Connecting live with Dr. ${instantDoctor.name}...`,
+        });
+
+        const instantBookingObj: Booking = response.booking || {
+          _id: bookingId,
+          id: bookingId,
+          doctorId: {
+            _id: docId,
+            name: instantDoctor.name,
+            specialty: instantDoctor.specialty,
+            photo: instantDoctor.photo,
+          },
+          slot: slotDate,
+          status: "confirmed",
+          type: "instant",
+          profileId,
+        };
+
+        setNextBooking(instantBookingObj);
+        loadData();
+        await handleJoinCall(instantBookingObj);
+        return;
+      }
+
       const razorpayOrderId = 
         response?.razorpayOrderId || 
         response?.paymentOrderId || 
