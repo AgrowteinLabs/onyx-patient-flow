@@ -128,6 +128,7 @@ const Consultations = () => {
   const localVideoRef = useRef<ICameraVideoTrack | null>(null);
   const [remoteUserConnected, setRemoteUserConnected] = useState(false);
   const [remoteVideoTrackActive, setRemoteVideoTrackActive] = useState(false);
+  const [hasWebRtcStream, setHasWebRtcStream] = useState(false);
   const [isRealCall, setIsRealCall] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const durationTimerRef = useRef<any>(null);
@@ -301,6 +302,7 @@ const Consultations = () => {
       remoteVideoElRef.current.srcObject = stream;
       remoteVideoElRef.current.play().catch(() => {});
     }
+    setHasWebRtcStream(true);
     setRemoteUserConnected(true);
     setRemoteVideoTrackActive(true);
     if (p2pRetryTimerRef.current) {
@@ -550,6 +552,7 @@ const Consultations = () => {
         setRemoteUserConnected(true);
         if (mediaType === "video") {
           setRemoteVideoTrackActive(true);
+          setHasWebRtcStream(false);
           setTimeout(() => {
             try {
               const container = document.getElementById("remote-video-agora");
@@ -559,10 +562,14 @@ const Consultations = () => {
             } catch (e) {
               console.warn("Agora remote video play note:", e);
             }
-          }, 100);
+          }, 50);
         }
         if (mediaType === "audio") {
-          user.audioTrack?.play();
+          try {
+            user.audioTrack?.play();
+          } catch (e) {
+            console.warn("Agora audio play note:", e);
+          }
         }
       });
 
@@ -1047,6 +1054,7 @@ const Consultations = () => {
       p2pRetryTimerRef.current = null;
     }
     remoteUserConnectedRef.current = false;
+    setHasWebRtcStream(false);
 
     if (broadcastChannelRef.current) {
       try {
@@ -1210,7 +1218,7 @@ const Consultations = () => {
                 <div
                   id="remote-video-agora"
                   className={`absolute inset-0 w-full h-full object-cover z-0 ${
-                    remoteVideoTrackActive && remoteUserConnected ? "block" : "hidden"
+                    !hasWebRtcStream && remoteVideoTrackActive && remoteUserConnected ? "block" : "hidden"
                   }`}
                 />
 
@@ -1221,7 +1229,7 @@ const Consultations = () => {
                   autoPlay
                   playsInline
                   className={`absolute inset-0 w-full h-full object-cover z-0 ${
-                    remoteVideoTrackActive && remoteUserConnected ? "block" : "hidden"
+                    hasWebRtcStream && remoteVideoTrackActive && remoteUserConnected ? "block" : "hidden"
                   }`}
                 />
 
