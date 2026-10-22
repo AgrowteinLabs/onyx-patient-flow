@@ -1131,9 +1131,21 @@ const Consultations = () => {
                             </span>
                           </div>
                         </div>
-                        <Badge className={`${lc.badgeClass} text-[8.5px] font-bold px-2 py-0.5`}>
-                          {lc.label}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge className={`${lc.badgeClass} text-[8.5px] font-bold px-2 py-0.5`}>
+                            {lc.label}
+                          </Badge>
+                          <Button
+                            onClick={() => navigate("/dashboard/user/prescriptions")}
+                            variant="outline"
+                            size="sm"
+                            className="text-[10px] font-bold h-7 px-2.5 rounded-lg border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 flex items-center gap-1"
+                            title="Open Prescription PDF"
+                          >
+                            <FileText className="h-3 w-3 text-[#2563eb]" />
+                            Rx PDF
+                          </Button>
+                        </div>
                       </div>
                     );
                   })}
