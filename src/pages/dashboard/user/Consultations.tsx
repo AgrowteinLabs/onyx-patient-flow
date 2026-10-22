@@ -27,12 +27,15 @@ import {
   PhoneCall,
   ShieldCheck,
   FileText,
-  Lock
+  Lock,
+  Camera,
+  Sliders
 } from "lucide-react";
 import AgoraRTC, { IAgoraRTCClient, ICameraVideoTrack, IMicrophoneAudioTrack } from "agora-rtc-sdk-ng";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { presenceService } from "@/services/presence.service";
 import { getBookingLifecycle } from "@/utils/booking-lifecycle";
+import { DevicePermissionsModal } from "@/components/shared/DevicePermissionsModal";
 
 const loadRazorpayScript = () => {
   return new Promise((resolve) => {
@@ -109,6 +112,7 @@ const Consultations = () => {
   const [videoToken, setVideoToken] = useState("");
   const [micActive, setMicActive] = useState(true);
   const [cameraActive, setCameraActive] = useState(true);
+  const [permissionModalOpen, setPermissionModalOpen] = useState(false);
 
   // Agora RTC states & refs (Option 1: 100% Pure Agora RTC)
   const clientRef = useRef<IAgoraRTCClient | null>(null);
@@ -269,7 +273,7 @@ const Consultations = () => {
 
       // Clean up previous client if exists
       if (clientRef.current) {
-        try { await clientRef.current.leave(); } catch {}
+        try { await clientRef.current.leave(); } catch (err) { console.debug("Agora client cleanup note:", err); }
       }
 
       const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
@@ -381,6 +385,7 @@ const Consultations = () => {
         toast({ title: "Connected to telehealth call" });
       } catch (mediaErr) {
         console.warn("[Agora RTC] Media devices permission note:", mediaErr);
+        setPermissionModalOpen(true);
         toast({
           title: "Camera & Mic Notice",
           description: "Operating in receive-only mode or permissions not granted.",
@@ -881,6 +886,17 @@ const Consultations = () => {
           <p className="text-slate-500 text-sm mt-1">Join live video visits and explore your consultation summaries</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPermissionModalOpen(true)}
+            className="rounded-full text-xs font-bold border-slate-200 text-slate-700 hover:text-blue-600 hover:border-blue-300 shadow-2xs h-9 px-3.5 flex items-center gap-1.5"
+            title="Camera & Microphone Permissions"
+          >
+            <Camera className="h-3.5 w-3.5 text-blue-500" />
+            <Mic className="h-3.5 w-3.5 text-emerald-500" />
+            <span>Camera & Mic Setup</span>
+          </Button>
           <Button variant="outline" size="icon" onClick={loadData} disabled={loading} className="rounded-full">
             <RefreshCcw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
@@ -1096,6 +1112,15 @@ const Consultations = () => {
                     <Calendar className="h-4 w-4 text-[#2563eb]" /> Schedule For Later
                   </Button>
                 )}
+
+                <Button 
+                  onClick={() => setPermissionModalOpen(true)}
+                  variant="outline"
+                  className="border-slate-200 text-slate-700 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50/50 font-bold rounded-xl shadow-xs h-11 px-4 text-xs flex items-center gap-1.5"
+                  title="Test Camera & Microphone Permissions"
+                >
+                  <Sliders className="h-4 w-4 text-[#2563eb]" /> Camera & Mic Setup
+                </Button>
               </div>
 
             </Card>
@@ -1568,6 +1593,12 @@ const Consultations = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Device & Hardware Permissions Setup Modal */}
+      <DevicePermissionsModal
+        open={permissionModalOpen}
+        onOpenChange={setPermissionModalOpen}
+      />
 
     </div>
   );
