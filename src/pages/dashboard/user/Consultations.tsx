@@ -254,7 +254,7 @@ const Consultations = () => {
         audio: true,
       });
       localStreamRef.current = stream;
-      if (localVideoElRef.current) {
+      if (localVideoElRef.current && localVideoElRef.current.srcObject !== stream) {
         localVideoElRef.current.srcObject = stream;
         localVideoElRef.current.play().catch(() => {});
       }
@@ -273,7 +273,7 @@ const Consultations = () => {
     console.log("[Telehealth] Remote media stream attached to video viewport on patient:", stream.id);
     remoteUserConnectedRef.current = true;
     (remoteVideoElRef as any)._stream = stream;
-    if (remoteVideoElRef.current) {
+    if (remoteVideoElRef.current && remoteVideoElRef.current.srcObject !== stream) {
       remoteVideoElRef.current.srcObject = stream;
       remoteVideoElRef.current.play().catch(() => {});
     }
@@ -536,20 +536,23 @@ const Consultations = () => {
             if (rawTrack) {
               const ms = new MediaStream([rawTrack]);
               (remoteVideoElRef as any)._stream = ms;
-              if (remoteVideoElRef.current) {
+              if (remoteVideoElRef.current && remoteVideoElRef.current.srcObject !== ms) {
                 remoteVideoElRef.current.srcObject = ms;
                 remoteVideoElRef.current.play().catch(() => {});
               }
+            } else {
+              setTimeout(() => {
+                try {
+                  const container = document.getElementById("remote-video");
+                  if (container && (!remoteVideoElRef.current || !remoteVideoElRef.current.srcObject)) {
+                    user.videoTrack?.play(container);
+                  }
+                } catch { /* ignore */ }
+              }, 300);
             }
           } catch (e) {
             console.debug("Could not attach raw Agora MediaStreamTrack:", e);
           }
-          setTimeout(() => {
-            try {
-              const container = document.getElementById("remote-video");
-              if (container) user.videoTrack?.play(container);
-            } catch { /* ignore */ }
-          }, 300);
         }
         if (mediaType === "audio") {
           user.audioTrack?.play();
@@ -1020,8 +1023,10 @@ const Consultations = () => {
 
   useEffect(() => {
     if (inVideoCall && localStreamRef.current && localVideoElRef.current) {
-      localVideoElRef.current.srcObject = localStreamRef.current;
-      localVideoElRef.current.play().catch(() => {});
+      if (localVideoElRef.current.srcObject !== localStreamRef.current) {
+        localVideoElRef.current.srcObject = localStreamRef.current;
+        localVideoElRef.current.play().catch(() => {});
+      }
     }
   }, [inVideoCall]);
 
@@ -1201,10 +1206,13 @@ const Consultations = () => {
               <div id="remote-video" className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center overflow-hidden">
                 <video
                   ref={(el) => {
-                    remoteVideoElRef.current = el;
-                    if (el && (remoteVideoElRef as any)._stream) {
-                      el.srcObject = (remoteVideoElRef as any)._stream;
-                      el.play().catch(() => {});
+                    if (el) {
+                      remoteVideoElRef.current = el;
+                      const st = (remoteVideoElRef as any)._stream;
+                      if (st && el.srcObject !== st) {
+                        el.srcObject = st;
+                        el.play().catch(() => {});
+                      }
                     }
                   }}
                   autoPlay
@@ -1251,10 +1259,12 @@ const Consultations = () => {
               >
                 <video
                   ref={(el) => {
-                    localVideoElRef.current = el;
-                    if (el && localStreamRef.current) {
-                      el.srcObject = localStreamRef.current;
-                      el.play().catch(() => {});
+                    if (el) {
+                      localVideoElRef.current = el;
+                      if (localStreamRef.current && el.srcObject !== localStreamRef.current) {
+                        el.srcObject = localStreamRef.current;
+                        el.play().catch(() => {});
+                      }
                     }
                   }}
                   autoPlay
