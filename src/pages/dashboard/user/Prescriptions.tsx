@@ -64,12 +64,17 @@ const Prescriptions = () => {
         b => b && (b.profileId === storedProfileId || !b.profileId)
       );
 
-      // We inspect all bookings that could have a prescription
-      const rxPromises = profileBookings.map(async (b: Booking) => {
+      // Filter to bookings that can realistically have a prescription issued
+      const eligibleBookings = profileBookings.filter((b: any) => {
+        const s = b.status?.toLowerCase();
+        return !s || s === "completed" || s === "confirmed" || s === "attended" || b.hasPrescription || b.prescription;
+      });
+
+      const rxPromises = eligibleBookings.map(async (b: Booking) => {
         try {
           const bookingId = b._id || b.id;
           if (!bookingId) return null;
-          const res: any = await getPrescription(bookingId);
+          const res: any = await getPrescription(bookingId, { silent: true });
           const rxData = res?.prescription || res?.data || res;
           
           if (rxData && (rxData.medications?.length > 0 || rxData.medicines?.length > 0 || rxData.diagnosis)) {
@@ -106,12 +111,40 @@ const Prescriptions = () => {
             return record;
           }
         } catch {
-          // No prescription for this booking
+          // No prescription found for this booking
         }
         return null;
       });
 
       const resolvedRxs = (await Promise.all(rxPromises)).filter(Boolean) as PrescriptionRecord[];
+
+      // Also check local cache for newly issued consultation prescriptions
+      try {
+        const saved = localStorage.getItem("onyx_doctor_prescriptions");
+        if (saved) {
+          const localList = JSON.parse(saved);
+          if (Array.isArray(localList)) {
+            localList.forEach((lp: any) => {
+              if (lp && !resolvedRxs.some(r => r.bookingId === lp.bookingId || r.id === lp.id)) {
+                resolvedRxs.push({
+                  id: lp.id || `rx-${Date.now()}`,
+                  bookingId: lp.bookingId || "telehealth-consult",
+                  doctorName: lp.doctorName || "Consulting Specialist",
+                  doctorSpecialty: "Telehealth Specialist",
+                  diagnosis: lp.notes?.includes("Diagnosis:") ? lp.notes.split("Diagnosis:")[1].split(".")[0].trim() : "Telehealth Evaluation",
+                  clinicalNotes: lp.notes || "",
+                  medications: Array.isArray(lp.medications) ? lp.medications : [{ name: "Prescribed Medicine", dosage: "Standard", frequency: "As directed", duration: "Course" }],
+                  date: lp.issuedDate || new Date().toISOString(),
+                  status: "active",
+                  refillAllowed: false,
+                });
+              }
+            });
+          }
+        }
+      } catch (err) {
+        console.debug("Local prescriptions cache check note:", err);
+      }
       
       // Sort newest prescriptions first
       resolvedRxs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());

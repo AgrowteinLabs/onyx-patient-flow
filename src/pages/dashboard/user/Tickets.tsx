@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { listAdminTickets, createTicket, Ticket } from "@/services/ticket.service";
+import { listUserTickets, createTicket, Ticket } from "@/services/ticket.service";
 import { listBookings, Booking } from "@/services/booking.service";
 import { 
   Ticket as TicketIcon, 
@@ -38,8 +38,8 @@ const Tickets = () => {
     try {
       setLoading(true);
       const [ticketsList, bookingsList] = await Promise.all([
-        listAdminTickets(),
-        listBookings()
+        listUserTickets().catch(() => []),
+        listBookings().catch(() => [])
       ]);
       
       setTickets(ticketsList || []);
@@ -62,6 +62,7 @@ const Tickets = () => {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleCreateTicket = async (e: React.FormEvent) => {

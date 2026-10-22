@@ -141,8 +141,8 @@ export const listBookings = async (): Promise<Booking[]> => {
   return res.bookings || res.data || (Array.isArray(res) ? res : []);
 };
 
-export const getPrescription = async (bookingId: string): Promise<any> => {
-  return apiRequest(`/api/prescription/${bookingId}`, { method: "GET" });
+export const getPrescription = async (bookingId: string, options: { silent?: boolean } = { silent: true }): Promise<any> => {
+  return apiRequest(`/api/prescription/${bookingId}`, { method: "GET", silent: options.silent !== false });
 };
 
 export const getSharedReports = async (bookingId: string): Promise<any> => {

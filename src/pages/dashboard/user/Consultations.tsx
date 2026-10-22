@@ -119,6 +119,7 @@ const Consultations = () => {
   const [isRealCall, setIsRealCall] = useState(false);
   const handleJoinCallRef = useRef<any>(null);
   const handleConsultationCompletedRef = useRef<any>(null);
+  const durationTimerRef = useRef<any>(null);
 
   // Consultation Detail Modal
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
@@ -240,7 +241,6 @@ const Consultations = () => {
 
     return () => {
       // Cleanup video call on unmount
-      if (durationTimerRef.current) clearInterval(durationTimerRef.current);
       if (localAudioRef.current) localAudioRef.current.close();
       if (localVideoRef.current) localVideoRef.current.close();
       if (clientRef.current) clientRef.current.leave();

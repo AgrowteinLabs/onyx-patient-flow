@@ -3,6 +3,7 @@ import { API_BASE_URL } from "./api-config";
 
 interface ApiRequestConfig extends AxiosRequestConfig {
   requiresAuth?: boolean;
+  silent?: boolean;
 }
 
 axios.defaults.withCredentials = true;
@@ -89,7 +90,7 @@ export const apiRequest = async <T = any>(
   endpoint: string,
   config: ApiRequestConfig = {}
 ): Promise<T> => {
-  const { requiresAuth = true, headers = {}, ...restConfig } = config;
+  const { requiresAuth = true, silent = false, headers = {}, ...restConfig } = config;
   const token = getAuthToken();
 
   const activeBaseUrl = restConfig.baseURL || localStorage.getItem("apiBaseUrl") || API_BASE_URL;
@@ -138,14 +139,17 @@ export const apiRequest = async <T = any>(
       const data = error.response?.data;
       const message = (typeof data?.error === "string" ? data.error : null) || data?.message || error.message;
 
-      console.groupCollapsed(
-        `%c❌ [API ERROR] ${requestConfig.method?.toUpperCase()} ${endpoint}`,
-        "color:red;font-weight:bold;"
-      );
-      console.log("Status:", status);
-      console.log("Message:", message);
-      console.log("Response Data:", data);
-      console.groupEnd();
+      const isSuppressed = silent && (status === 404 || status === 401 || status === 403);
+      if (!isSuppressed) {
+        console.groupCollapsed(
+          `%c❌ [API ERROR] ${requestConfig.method?.toUpperCase()} ${endpoint}`,
+          "color:red;font-weight:bold;"
+        );
+        console.log("Status:", status);
+        console.log("Message:", message);
+        console.log("Response Data:", data);
+        console.groupEnd();
+      }
 
       /* 401 Handling → refresh token flow */
       if (status === 401 && requiresAuth) {
