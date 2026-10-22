@@ -110,28 +110,15 @@ const Consultations = () => {
   const [micActive, setMicActive] = useState(true);
   const [cameraActive, setCameraActive] = useState(true);
 
-  // Real media stream & WebRTC peer connection refs
-  const localVideoElRef = useRef<HTMLVideoElement | null>(null);
-  const remoteVideoElRef = useRef<HTMLVideoElement | null>(null);
-  const localStreamRef = useRef<MediaStream | null>(null);
-  const peerConnRef = useRef<RTCPeerConnection | null>(null);
-  const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
-  const peerJSRef = useRef<any>(null);
-  const p2pRetryTimerRef = useRef<any>(null);
-  const remoteUserConnectedRef = useRef(false);
-  const handleJoinCallRef = useRef<any>(null);
-  const handleConsultationCompletedRef = useRef<any>(null);
-
-  // Agora states & refs
+  // Agora RTC states & refs (Option 1: 100% Pure Agora RTC)
   const clientRef = useRef<IAgoraRTCClient | null>(null);
   const localAudioRef = useRef<IMicrophoneAudioTrack | null>(null);
   const localVideoRef = useRef<ICameraVideoTrack | null>(null);
   const [remoteUserConnected, setRemoteUserConnected] = useState(false);
   const [remoteVideoTrackActive, setRemoteVideoTrackActive] = useState(false);
-  const [hasWebRtcStream, setHasWebRtcStream] = useState(false);
   const [isRealCall, setIsRealCall] = useState(false);
-  const [callDuration, setCallDuration] = useState(0);
-  const durationTimerRef = useRef<any>(null);
+  const handleJoinCallRef = useRef<any>(null);
+  const handleConsultationCompletedRef = useRef<any>(null);
 
   // Consultation Detail Modal
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
@@ -269,270 +256,6 @@ const Consultations = () => {
     return `${m}:${s}`;
   };
 
-  const startLocalMedia = async () => {
-    try {
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach((t) => t.stop());
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
-        audio: true,
-      });
-      localStreamRef.current = stream;
-      if (localVideoElRef.current && localVideoElRef.current.srcObject !== stream) {
-        localVideoElRef.current.srcObject = stream;
-        localVideoElRef.current.play().catch(() => {});
-      }
-      return stream;
-    } catch (err) {
-      console.warn("Could not acquire local camera/mic:", err);
-      toast({
-        title: "Camera & Mic Notice",
-        description: "Operating in receive-only mode or permissions not granted.",
-      });
-      return null;
-    }
-  };
-
-  const attachRemoteStream = (stream: MediaStream) => {
-    console.log("[Telehealth] Remote media stream attached to video viewport on patient:", stream.id);
-    remoteUserConnectedRef.current = true;
-    (remoteVideoElRef as any)._stream = stream;
-    if (remoteVideoElRef.current && remoteVideoElRef.current.srcObject !== stream) {
-      remoteVideoElRef.current.srcObject = stream;
-      remoteVideoElRef.current.play().catch(() => {});
-    }
-    setHasWebRtcStream(true);
-    setRemoteUserConnected(true);
-    setRemoteVideoTrackActive(true);
-    if (p2pRetryTimerRef.current) {
-      clearInterval(p2pRetryTimerRef.current);
-      p2pRetryTimerRef.current = null;
-    }
-  };
-
-  const setupWebRTCPeer = (targetRoomId: string, role: "patient" | "doctor", localStream: MediaStream | null) => {
-    try {
-      if (broadcastChannelRef.current) {
-        broadcastChannelRef.current.close();
-      }
-      if (peerConnRef.current) {
-        peerConnRef.current.close();
-      }
-
-      const pc = new RTCPeerConnection({
-        iceServers: [
-          { urls: "stun:stun.l.google.com:19302" },
-          { urls: "stun:stun1.l.google.com:19302" },
-          { urls: "stun:stun2.l.google.com:19302" },
-        ],
-      });
-      peerConnRef.current = pc;
-
-      const candidateQueue: RTCIceCandidateInit[] = [];
-
-      if (localStream) {
-        localStream.getTracks().forEach((track) => {
-          pc.addTrack(track, localStream);
-        });
-      }
-
-      pc.ontrack = (event) => {
-        console.log("WebRTC ontrack received remote video on patient:", event.streams[0]);
-        if (event.streams && event.streams[0]) {
-          attachRemoteStream(event.streams[0]);
-          toast({ title: "Doctor connected via live video feed!" });
-        }
-      };
-
-      const primaryChannel = new BroadcastChannel(`onyx-telehealth-${targetRoomId}`);
-      const fallbackChannel = new BroadcastChannel("onyx-telehealth-active-session");
-      broadcastChannelRef.current = primaryChannel;
-
-      const sendSignal = (data: any) => {
-        try { primaryChannel.postMessage(data); } catch { /* ignore */ }
-        try { fallbackChannel.postMessage(data); } catch { /* ignore */ }
-      };
-
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          sendSignal({
-            type: "webrtc-candidate",
-            candidate: event.candidate,
-            sender: role,
-          });
-        }
-      };
-
-      const handleSignalMessage = async (event: MessageEvent) => {
-        const data = event.data || {};
-        if (data.sender === role) return;
-
-        if (data.type === "peer-joined" || data.type === "doctor-ready") {
-          // Notify doctor that patient is in the room and ready
-          sendSignal({ type: "patient-ready", sender: role });
-        } else if (data.type === "webrtc-offer") {
-          // Patient answers doctor's offer
-          try {
-            await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-            while (candidateQueue.length > 0) {
-              const c = candidateQueue.shift();
-              if (c) await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
-            }
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            sendSignal({
-              type: "webrtc-answer",
-              sdp: answer,
-              sender: role,
-            });
-            setRemoteUserConnected(true);
-            setRemoteVideoTrackActive(true);
-          } catch (err) {
-            console.warn("Error answering WebRTC offer on patient:", err);
-          }
-        } else if (data.type === "webrtc-candidate") {
-          try {
-            if (data.candidate) {
-              if (pc.remoteDescription && pc.remoteDescription.type) {
-                await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-              } else {
-                candidateQueue.push(data.candidate);
-              }
-            }
-          } catch (err) {
-            console.debug("Error adding ICE candidate on patient:", err);
-          }
-        } else if (data.type === "call-ended" || data.type === "consultation-completed" || data.action === "consultation-completed") {
-          setRemoteUserConnected(false);
-          setRemoteVideoTrackActive(false);
-          handleConsultationCompletedRef.current?.(data.bookingId);
-        }
-      };
-
-      primaryChannel.onmessage = handleSignalMessage;
-      fallbackChannel.onmessage = handleSignalMessage;
-
-      // Announce patient joined
-      sendSignal({ type: "peer-joined", sender: role });
-      sendSignal({ type: "patient-ready", sender: role });
-
-    } catch (err) {
-      console.warn("WebRTC setup note on patient:", err);
-    }
-  };
-
-  const setupP2PConnection = async (targetRoomId: string, role: "patient" | "doctor", localStream: MediaStream | null) => {
-    try {
-      if (peerJSRef.current) {
-        try { peerJSRef.current.destroy(); } catch { /* ignore */ }
-        peerJSRef.current = null;
-      }
-      if (p2pRetryTimerRef.current) {
-        clearInterval(p2pRetryTimerRef.current);
-        p2pRetryTimerRef.current = null;
-      }
-      remoteUserConnectedRef.current = false;
-
-      const PeerClass = (window as any).Peer || await new Promise<any>((resolve) => {
-        const s = document.createElement("script");
-        s.src = "https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js";
-        s.onload = () => resolve((window as any).Peer);
-        s.onerror = () => resolve(null);
-        document.head.appendChild(s);
-      });
-
-      if (!PeerClass) {
-        console.warn("[Telehealth P2P] PeerJS could not be loaded");
-        return;
-      }
-
-      const cleanRoomId = String(targetRoomId).replace(/[^a-zA-Z0-9_-]/g, "");
-      const myPeerId = role === "patient" ? `onyx-pat-${cleanRoomId}` : `onyx-doc-${cleanRoomId}`;
-      const targetPeerId = role === "patient" ? `onyx-doc-${cleanRoomId}` : `onyx-pat-${cleanRoomId}`;
-
-      console.log(`[Telehealth P2P] Initializing Peer (${role}): ${myPeerId} -> Target: ${targetPeerId}`);
-
-      const peer = new PeerClass(myPeerId, {
-        config: {
-          iceServers: [
-            { urls: "stun:stun.l.google.com:19302" },
-            { urls: "stun:stun1.l.google.com:19302" },
-            { urls: "stun:stun2.l.google.com:19302" },
-          ],
-        },
-        debug: 1,
-      });
-      peerJSRef.current = peer;
-
-      // Listen for data signals (e.g. consultation-completed) from doctor
-      peer.on("connection", (conn: any) => {
-        conn.on("data", (data: any) => {
-          console.log("[Telehealth P2P] Received data signal from doctor:", data);
-          if (data?.type === "consultation-completed" || data?.action === "consultation-completed") {
-            handleConsultationCompletedRef.current?.(data.bookingId);
-          }
-        });
-      });
-
-      peer.on("call", (mediaCall: any) => {
-        console.log(`[Telehealth P2P] Incoming call from ${mediaCall.peer}. Answering with local stream...`);
-        if (localStream) {
-          mediaCall.answer(localStream);
-        } else {
-          mediaCall.answer();
-        }
-        mediaCall.on("stream", (remoteStream: MediaStream) => {
-          console.log("[Telehealth P2P] Remote video stream received via PeerJS answer on patient!");
-          attachRemoteStream(remoteStream);
-        });
-        mediaCall.on("close", () => {
-          console.log("[Telehealth P2P] Incoming media call closed by doctor");
-          handleConsultationCompletedRef.current?.();
-        });
-      });
-
-      peer.on("open", (id: string) => {
-        console.log(`[Telehealth P2P] Peer open with ID: ${id}`);
-        const attemptOutgoingCall = () => {
-          if (remoteUserConnectedRef.current) return;
-          console.log(`[Telehealth P2P] Attempting call to ${targetPeerId}...`);
-          try {
-            if (localStream) {
-              const mediaCall = peer.call(targetPeerId, localStream);
-              if (mediaCall) {
-                mediaCall.on("stream", (remoteStream: MediaStream) => {
-                  console.log("[Telehealth P2P] Remote stream received from outgoing call on patient!");
-                  attachRemoteStream(remoteStream);
-                });
-                mediaCall.on("close", () => {
-                  console.log("[Telehealth P2P] Outgoing media call closed by doctor");
-                  handleConsultationCompletedRef.current?.();
-                });
-              }
-            }
-          } catch (e) {
-            console.debug("[Telehealth P2P] Call attempt note:", e);
-          }
-        };
-
-        attemptOutgoingCall();
-        p2pRetryTimerRef.current = setInterval(attemptOutgoingCall, 2500);
-      });
-
-      peer.on("error", (err: any) => {
-        console.warn("[Telehealth P2P] Peer note:", err?.type || err?.message || err);
-        if (err?.type === "unavailable-id") {
-          setTimeout(() => {
-            try { peer.reconnect(); } catch { /* ignore */ }
-          }, 1000);
-        }
-      });
-    } catch (err) {
-      console.warn("[Telehealth P2P] Setup error:", err);
-    }
-  };
-
   const startSimulatedCall = () => {
     setIsRealCall(false);
     toast({ title: "Connected to secure telehealth consultation room" });
@@ -544,32 +267,46 @@ const Consultations = () => {
       setRemoteUserConnected(false);
       setRemoteVideoTrackActive(false);
 
+      // Clean up previous client if exists
+      if (clientRef.current) {
+        try { await clientRef.current.leave(); } catch {}
+      }
+
       const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
       clientRef.current = client;
 
+      // Handle doctor subscribing & publishing
       client.on("user-published", async (user: any, mediaType: "video" | "audio") => {
-        await client.subscribe(user, mediaType);
-        setRemoteUserConnected(true);
-        if (mediaType === "video") {
-          setRemoteVideoTrackActive(true);
-          setHasWebRtcStream(false);
-          setTimeout(() => {
-            try {
-              const container = document.getElementById("remote-video-agora");
-              if (container) {
-                user.videoTrack?.play(container);
+        try {
+          await client.subscribe(user, mediaType);
+          setRemoteUserConnected(true);
+
+          if (mediaType === "video") {
+            setRemoteVideoTrackActive(true);
+            setTimeout(() => {
+              try {
+                const container = document.getElementById("remote-video-container");
+                if (container) {
+                  container.innerHTML = "";
+                  user.videoTrack?.play(container);
+                  console.log("[Agora RTC] Doctor video track playing in patient remote viewport");
+                }
+              } catch (e) {
+                console.warn("[Agora RTC] Remote video playback note:", e);
               }
-            } catch (e) {
-              console.warn("Agora remote video play note:", e);
-            }
-          }, 50);
-        }
-        if (mediaType === "audio") {
-          try {
-            user.audioTrack?.play();
-          } catch (e) {
-            console.warn("Agora audio play note:", e);
+            }, 50);
           }
+
+          if (mediaType === "audio") {
+            try {
+              user.audioTrack?.play();
+              console.log("[Agora RTC] Doctor audio track playing");
+            } catch (e) {
+              console.warn("[Agora RTC] Audio autoplay note:", e);
+            }
+          }
+        } catch (subErr) {
+          console.error("[Agora RTC] Error subscribing to doctor:", subErr);
         }
       });
 
@@ -580,57 +317,59 @@ const Consultations = () => {
       });
 
       client.on("user-left", () => {
+        console.log("[Agora RTC] Doctor left call");
         setRemoteUserConnected(false);
         setRemoteVideoTrackActive(false);
         handleConsultationCompletedRef.current?.();
       });
 
       const rtcToken = (token && !token.toLowerCase().includes("mock") && token.length > 30) ? token : null;
-      const targetUid = userUid !== undefined && userUid !== null ? userUid : Math.floor(Math.random() * 1000000);
+      // Patient UID format: 1xxxxx
+      const targetUid = userUid !== undefined && userUid !== null && !isNaN(Number(userUid))
+        ? Number(userUid)
+        : 100000 + Math.floor(Math.random() * 899999);
 
       try {
-        console.log(`[Agora RTC] Joining channel ${channelName} with uid=${targetUid}, token=${rtcToken ? "provided" : "null"}`);
+        console.log(`[Agora RTC] Joining channel ${channelName} as patient uid=${targetUid}`);
         await client.join(appId, channelName, rtcToken, targetUid);
       } catch (joinErr: any) {
-        console.warn("[Agora RTC] Initial join with token failed:", joinErr);
-        if (rtcToken && (joinErr?.message?.includes("invalid token") || joinErr?.code === "CAN_NOT_GET_GATEWAY_SERVER" || String(joinErr).includes("authorized failed"))) {
-          console.log("[Agora RTC] Retrying join with token=null (Testing Mode / Certificate bypass)...");
+        console.warn("[Agora RTC] Join with token failed:", joinErr);
+        if (rtcToken) {
+          console.log("[Agora RTC] Retrying join with token=null (Testing mode)...");
           await client.join(appId, channelName, null, targetUid);
-          console.log("[Agora RTC] Join with token=null succeeded!");
         } else {
           throw joinErr;
         }
       }
 
+      // Initialize hardware mic and camera via native Agora SDK
       try {
-        let localAudio: any = null;
-        let localVideo: any = null;
+        const localAudio = await AgoraRTC.createMicrophoneAudioTrack({
+          AEC: true,
+          ANS: true,
+          AGC: true,
+        });
+        const localVideo = await AgoraRTC.createCameraVideoTrack({
+          encoderConfig: "720p_1",
+        });
 
-        if (localStreamRef.current) {
-          const vTrack = localStreamRef.current.getVideoTracks()[0];
-          const aTrack = localStreamRef.current.getAudioTracks()[0];
-          if (vTrack) {
-            try {
-              localVideo = AgoraRTC.createCustomVideoTrack({ mediaStreamTrack: vTrack });
-            } catch { /* fallback to camera track */ }
-          }
-          if (aTrack) {
-            try {
-              localAudio = AgoraRTC.createCustomAudioTrack({ mediaStreamTrack: aTrack });
-            } catch { /* fallback to mic track */ }
-          }
-        }
-
-        if (!localAudio) {
-          localAudio = await AgoraRTC.createMicrophoneAudioTrack();
-        }
-        if (!localVideo) {
-          localVideo = await AgoraRTC.createCameraVideoTrack();
-        }
         localAudioRef.current = localAudio;
         localVideoRef.current = localVideo;
 
         await client.publish([localAudio, localVideo]);
+        console.log("[Agora RTC] Patient audio and video tracks published successfully");
+
+        setTimeout(() => {
+          try {
+            const localContainer = document.getElementById("local-video-container");
+            if (localContainer) {
+              localContainer.innerHTML = "";
+              localVideo.play(localContainer);
+            }
+          } catch (e) {
+            console.warn("[Agora RTC] Local preview play note:", e);
+          }
+        }, 50);
 
         if (!micActive) {
           await localAudio.setEnabled(false);
@@ -641,11 +380,15 @@ const Consultations = () => {
 
         toast({ title: "Connected to telehealth call" });
       } catch (mediaErr) {
-        console.warn("Agora media devices permission note:", mediaErr);
+        console.warn("[Agora RTC] Media devices permission note:", mediaErr);
+        toast({
+          title: "Camera & Mic Notice",
+          description: "Operating in receive-only mode or permissions not granted.",
+        });
       }
 
     } catch (err) {
-      console.warn("Agora cloud connection note, using direct WebRTC session:", err);
+      console.error("[Agora RTC] Call error:", err);
       startSimulatedCall();
     }
   };
@@ -1014,10 +757,6 @@ const Consultations = () => {
       setVideoToken(token);
       setInVideoCall(true);
 
-      const localStream = await startLocalMedia();
-      setupWebRTCPeer(targetBookingId, "patient", localStream);
-      setupP2PConnection(targetBookingId, "patient", localStream);
-
       const isRealAgora = appId && !appId.startsWith("mock") && appId.length >= 10;
       if (isRealAgora) {
         startAgoraCall(appId, channelName, token, backendUid);
@@ -1030,72 +769,24 @@ const Consultations = () => {
     }
   };
 
-  useEffect(() => {
-    if (inVideoCall && localStreamRef.current && localVideoElRef.current) {
-      if (localVideoElRef.current.srcObject !== localStreamRef.current) {
-        localVideoElRef.current.srcObject = localStreamRef.current;
-        localVideoElRef.current.play().catch(() => {});
-      }
-    }
-  }, [inVideoCall]);
+  
 
   const handleEndCall = async () => {
-    if (durationTimerRef.current) {
-      clearInterval(durationTimerRef.current);
-      durationTimerRef.current = null;
-    }
-
-    if (peerJSRef.current) {
-      try { peerJSRef.current.destroy(); } catch (e) { console.debug("PeerJS destroy note:", e); }
-      peerJSRef.current = null;
-    }
-    if (p2pRetryTimerRef.current) {
-      clearInterval(p2pRetryTimerRef.current);
-      p2pRetryTimerRef.current = null;
-    }
-    remoteUserConnectedRef.current = false;
-    setHasWebRtcStream(false);
-
-    if (broadcastChannelRef.current) {
-      try {
-        broadcastChannelRef.current.postMessage({ type: "call-ended", sender: "patient" });
-        broadcastChannelRef.current.close();
-      } catch (e) {
-        console.debug("Broadcast channel close note:", e);
+    try {
+      if (localAudioRef.current) {
+        localAudioRef.current.close();
+        localAudioRef.current = null;
       }
-      broadcastChannelRef.current = null;
-    }
-
-    if (peerConnRef.current) {
-      try {
-        peerConnRef.current.close();
-      } catch (e) {
-        console.debug("Peer connection close note:", e);
+      if (localVideoRef.current) {
+        localVideoRef.current.close();
+        localVideoRef.current = null;
       }
-      peerConnRef.current = null;
-    }
-
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((track) => track.stop());
-      localStreamRef.current = null;
-    }
-
-    if (localAudioRef.current) {
-      localAudioRef.current.close();
-      localAudioRef.current = null;
-    }
-    if (localVideoRef.current) {
-      localVideoRef.current.close();
-      localVideoRef.current = null;
-    }
-
-    if (clientRef.current) {
-      try {
+      if (clientRef.current) {
         await clientRef.current.leave();
-      } catch (err) {
-        console.error("Error leaving Agora client:", err);
+        clientRef.current = null;
       }
-      clientRef.current = null;
+    } catch (e) {
+      console.debug("Agora cleanup note:", e);
     }
 
     setInVideoCall(false);
@@ -1158,9 +849,6 @@ const Consultations = () => {
   const toggleMic = async () => {
     const nextState = !micActive;
     setMicActive(nextState);
-    if (localStreamRef.current) {
-      localStreamRef.current.getAudioTracks().forEach((t) => (t.enabled = nextState));
-    }
     if (localAudioRef.current) {
       try {
         await localAudioRef.current.setEnabled(nextState);
@@ -1173,9 +861,6 @@ const Consultations = () => {
   const toggleCamera = async () => {
     const nextState = !cameraActive;
     setCameraActive(nextState);
-    if (localStreamRef.current) {
-      localStreamRef.current.getVideoTracks().forEach((t) => (t.enabled = nextState));
-    }
     if (localVideoRef.current) {
       try {
         await localVideoRef.current.setEnabled(nextState);
@@ -1214,22 +899,11 @@ const Consultations = () => {
               
               {/* Doctor Video Feed (Big background) */}
               <div id="remote-video" className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center overflow-hidden">
-                {/* Dedicated Agora container */}
+                {/* Dedicated Agora Remote Container */}
                 <div
-                  id="remote-video-agora"
+                  id="remote-video-container"
                   className={`absolute inset-0 w-full h-full object-cover z-0 ${
-                    !hasWebRtcStream && remoteVideoTrackActive && remoteUserConnected ? "block" : "hidden"
-                  }`}
-                />
-
-                {/* Dedicated WebRTC / PeerJS video element */}
-                <video
-                  ref={remoteVideoElRef}
-                  id="remote-video-webrtc"
-                  autoPlay
-                  playsInline
-                  className={`absolute inset-0 w-full h-full object-cover z-0 ${
-                    hasWebRtcStream && remoteVideoTrackActive && remoteUserConnected ? "block" : "hidden"
+                    remoteVideoTrackActive && remoteUserConnected ? "block" : "hidden"
                   }`}
                 />
 
@@ -1268,11 +942,8 @@ const Consultations = () => {
                 id="local-video" 
                 className="absolute bottom-20 right-4 h-32 w-24 rounded-xl border border-slate-700/80 bg-slate-800 overflow-hidden shadow-md z-10 flex items-center justify-center"
               >
-                <video
-                  ref={localVideoElRef}
-                  autoPlay
-                  muted
-                  playsInline
+                <div
+                  id="local-video-container"
                   className={`w-full h-full object-cover -scale-x-100 ${cameraActive ? "block" : "hidden"}`}
                 />
                 {!cameraActive && (
