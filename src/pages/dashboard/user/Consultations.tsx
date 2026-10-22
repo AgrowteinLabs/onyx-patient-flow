@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, memo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -55,7 +55,7 @@ const loadRazorpayScript = () => {
   });
 };
 
-const CallTimerBadge: React.FC<{ active: boolean }> = React.memo(({ active }) => {
+const CallTimerBadge = memo(({ active }: { active: boolean }) => {
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
