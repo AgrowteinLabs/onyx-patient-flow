@@ -1046,7 +1046,21 @@ const Consultations = () => {
   const totalLogsPages = Math.max(1, Math.ceil(allVisitLogs.length / logsPerPage));
   const paginatedVisitLogs = allVisitLogs.slice((logsPage - 1) * logsPerPage, logsPage * logsPerPage);
 
-  const allTimelineItems = [
+  interface TimelineEntry {
+    id: string;
+    type: "telehealth" | "diagnostic";
+    date: Date;
+    formattedTime: string;
+    title: string;
+    subtitle: string;
+    badgeLabel: string;
+    badgeClass: string;
+    description: string;
+    booking?: Booking;
+    session?: Session;
+  }
+
+  const allTimelineItems: TimelineEntry[] = [
     ...pastBookings.map((b) => {
       const lc = getBookingLifecycle(b);
       return {
@@ -1543,9 +1557,9 @@ const Consultations = () => {
                             <p className="text-[9.5px] text-slate-500 font-semibold leading-relaxed pt-0.5">
                               {item.description}
                             </p>
-                            {item.booking && (
+                            {item.type === "telehealth" && item.booking && (
                               <button
-                                onClick={() => handleViewDoctorNotes(item.booking!)}
+                                onClick={() => handleViewDoctorNotes(item.booking)}
                                 className="mt-1 text-[10px] font-bold text-[#2563eb] hover:underline flex items-center gap-1 cursor-pointer"
                               >
                                 <FileText className="h-2.5 w-2.5" /> View Doctor Notes & Summary
