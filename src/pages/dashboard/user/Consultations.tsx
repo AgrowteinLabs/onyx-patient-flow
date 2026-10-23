@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { listSessions, Session } from "@/services/session.service";
-import { listBookings, createBooking, confirmBooking, Booking } from "@/services/booking.service";
+import { listBookings, createBooking, confirmBooking, getPrescription, Booking } from "@/services/booking.service";
 import { listDoctors, getDoctorAvailability, Doctor, DoctorSlot } from "@/services/doctor.service";
 import { listReportsByProfile } from "@/services/report.service";
 import { apiRequest } from "@/lib/api-request";
@@ -29,13 +29,20 @@ import {
   FileText,
   Lock,
   Camera,
-  Sliders
+  Sliders,
+  Pill,
+  Printer,
+  ChevronLeft,
+  ChevronRight,
+  Stethoscope,
+  Sparkles
 } from "lucide-react";
 import AgoraRTC, { IAgoraRTCClient, ICameraVideoTrack, IMicrophoneAudioTrack } from "agora-rtc-sdk-ng";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { presenceService } from "@/services/presence.service";
 import { getBookingLifecycle } from "@/utils/booking-lifecycle";
 import { DevicePermissionsModal } from "@/components/shared/DevicePermissionsModal";
+import { openPrescriptionPdf } from "@/utils/prescriptionPdf";
 
 const loadRazorpayScript = () => {
   return new Promise((resolve) => {
@@ -128,6 +135,152 @@ const Consultations = () => {
   // Consultation Detail Modal
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [openDetailDialog, setOpenDetailDialog] = useState(false);
+
+  // Pagination & Consultation Logs State
+  const [logsPage, setLogsPage] = useState(1);
+  const logsPerPage = 4;
+  const [timelinePage, setTimelinePage] = useState(1);
+  const timelinePerPage = 4;
+  const [openingRxId, setOpeningRxId] = useState<string | null>(null);
+
+  // Doctor In-Consultation Notes Dialog state
+  const [selectedBookingForNotes, setSelectedBookingForNotes] = useState<Booking | null>(null);
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [bookingNotesData, setBookingNotesData] = useState<{
+    notes: string;
+    diagnosis: string;
+    medications: any[];
+    prescriptionObj: any | null;
+  } | null>(null);
+
+  const handleDirectOpenPrescription = async (booking: Booking) => {
+    const bId = booking._id || booking.id;
+    if (!bId) {
+      toast({ title: "Prescription Not Found", description: "Invalid consultation identifier.", variant: "destructive" });
+      return;
+    }
+
+    setOpeningRxId(bId);
+    try {
+      let rxData: any = null;
+      try {
+        const res: any = await getPrescription(bId, { silent: true });
+        rxData = res?.prescription || res?.data || res;
+      } catch {
+        // Fallback to local cache
+      }
+
+      if (!rxData || (!rxData.medications?.length && !rxData.medicines?.length && !rxData.diagnosis)) {
+        try {
+          const saved = localStorage.getItem("onyx_doctor_prescriptions");
+          if (saved) {
+            const list = JSON.parse(saved);
+            if (Array.isArray(list)) {
+              const found = list.find((lp: any) => lp && (lp.bookingId === bId || lp.id === bId));
+              if (found) {
+                rxData = {
+                  id: found.id || `rx-${bId}`,
+                  bookingId: bId,
+                  doctorName: found.doctorName || booking.doctorId?.name || "Consulting Specialist",
+                  doctorSpecialty: booking.doctorId?.specialty || "Telehealth Specialist",
+                  diagnosis: found.notes?.includes("Diagnosis:") ? found.notes.split("Diagnosis:")[1].split(".")[0].trim() : "Telehealth Evaluation",
+                  clinicalNotes: found.notes || "",
+                  medications: Array.isArray(found.medications) ? found.medications : [{ name: "Prescribed Medicine", dosage: "Standard", frequency: "As directed", duration: "Course" }],
+                  date: found.issuedDate || new Date().toISOString(),
+                };
+              }
+            }
+          }
+        } catch { /* ignore */ }
+      }
+
+      if (rxData && (rxData.medications?.length > 0 || rxData.medicines?.length > 0 || rxData.diagnosis || rxData.clinicalNotes)) {
+        toast({
+          title: "Preparing Official Prescription PDF",
+          description: `Opening printable PDF for Dr. ${rxData.doctorDigitalSignature?.doctorName || rxData.doctorName || booking.doctorId?.name || "Doctor"}...`
+        });
+        openPrescriptionPdf({
+          ...rxData,
+          doctorName: rxData.doctorDigitalSignature?.doctorName || rxData.doctorName || booking.doctorId?.name || "Consulting Doctor",
+          doctorSpecialty: booking.doctorId?.specialty || rxData.doctorSpecialty || "General Medicine",
+          bookingId: bId,
+          date: rxData.date || rxData.createdAt || booking.slotDate || new Date().toISOString(),
+        }, true);
+      } else {
+        toast({
+          title: "No Prescription Issued",
+          description: "Your consulting doctor did not issue a digital prescription for this visit.",
+        });
+      }
+    } catch (err) {
+      console.error("Prescription fetch error:", err);
+      toast({
+        title: "Unable to retrieve prescription",
+        description: "Please check the Prescriptions section in your sidebar menu.",
+        variant: "destructive"
+      });
+    } finally {
+      setOpeningRxId(null);
+    }
+  };
+
+  const handleViewDoctorNotes = async (b: Booking) => {
+    setSelectedBookingForNotes(b);
+    setNotesLoading(true);
+    setBookingNotesData(null);
+
+    const bId = b._id || b.id;
+    let notes = b.notes || b.consultationNotes || b.clinicalNotes || b.doctorNotes || "";
+    let diagnosis = b.diagnosis || "";
+    let medications: any[] = [];
+    let prescriptionObj: any = null;
+
+    try {
+      if (bId) {
+        try {
+          const res: any = await getPrescription(bId, { silent: true });
+          const rxData = res?.prescription || res?.data || res;
+          if (rxData) {
+            prescriptionObj = rxData;
+            if (!diagnosis && rxData.diagnosis) diagnosis = rxData.diagnosis;
+            if (!notes) notes = rxData.clinicalNotes || rxData.instructions || rxData.notes || "";
+            if (Array.isArray(rxData.medications)) medications = rxData.medications;
+            else if (Array.isArray(rxData.medicines)) medications = rxData.medicines;
+          }
+        } catch { /* silent */ }
+      }
+
+      if (!prescriptionObj && bId) {
+        try {
+          const saved = localStorage.getItem("onyx_doctor_prescriptions");
+          if (saved) {
+            const list = JSON.parse(saved);
+            if (Array.isArray(list)) {
+              const found = list.find((lp: any) => lp && (lp.bookingId === bId || lp.id === bId));
+              if (found) {
+                prescriptionObj = found;
+                if (!diagnosis && found.notes?.includes("Diagnosis:")) {
+                  diagnosis = found.notes.split("Diagnosis:")[1].split(".")[0].trim();
+                }
+                if (!notes) notes = found.notes || "";
+                if (Array.isArray(found.medications)) medications = found.medications;
+              }
+            }
+          }
+        } catch { /* silent */ }
+      }
+    } catch (err) {
+      console.error("Failed to load doctor consultation notes:", err);
+    } finally {
+      setBookingNotesData({
+        notes: notes || "Doctor completed the clinical consultation. No supplementary follow-up notes were recorded for this session.",
+        diagnosis,
+        medications,
+        prescriptionObj,
+      });
+      setNotesLoading(false);
+    }
+  };
 
   const paramDoctorId = searchParams.get("doctorId");
   const directConsult = searchParams.get("direct") === "true";
@@ -875,6 +1028,63 @@ const Consultations = () => {
     }
   };
 
+  const allVisitLogs = [
+    ...pastBookings.map((b) => ({
+      id: b._id || b.id,
+      type: "telehealth" as const,
+      date: new Date(b.slot || b.slotDate || b.createdAt || 0),
+      booking: b,
+    })),
+    ...sessions.map((s) => ({
+      id: s._id || s.id,
+      type: "diagnostic" as const,
+      date: new Date(s.createdAt || 0),
+      session: s,
+    })),
+  ].sort((a, b) => b.date.getTime() - a.date.getTime());
+
+  const totalLogsPages = Math.max(1, Math.ceil(allVisitLogs.length / logsPerPage));
+  const paginatedVisitLogs = allVisitLogs.slice((logsPage - 1) * logsPerPage, logsPage * logsPerPage);
+
+  const allTimelineItems = [
+    ...pastBookings.map((b) => {
+      const lc = getBookingLifecycle(b);
+      return {
+        id: b._id || b.id,
+        type: "telehealth" as const,
+        date: new Date(b.slot || b.slotDate || b.createdAt || 0),
+        formattedTime: lc.formattedTime,
+        title: b.doctorId?.name ? `Dr. ${b.doctorId.name}` : "Medical Practitioner",
+        subtitle: b.doctorId?.specialty || "Telehealth Consultation",
+        badgeLabel: lc.label,
+        badgeClass: lc.badgeClass,
+        description: lc.category === "missed" 
+          ? "Appointment time passed and consultation was not attended."
+          : lc.category === "completed"
+          ? "Consultation successfully completed with medical specialist."
+          : lc.category === "cancelled"
+          ? "Consultation booking was cancelled."
+          : "Consultation slot recorded.",
+        booking: b,
+      };
+    }),
+    ...sessions.map((session) => ({
+      id: session._id || session.id,
+      type: "diagnostic" as const,
+      date: new Date(session.createdAt || 0),
+      formattedTime: new Date(session.createdAt).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }),
+      title: "Diagnostic Checkout Session",
+      subtitle: session.productId?.name || "Onyx Diagnostic Device",
+      badgeLabel: "Completed",
+      badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
+      description: "Diagnosed details synced with diagnostic panel. Medical equipment values recorded.",
+      session,
+    })),
+  ].sort((a, b) => b.date.getTime() - a.date.getTime());
+
+  const totalTimelinePages = Math.max(1, Math.ceil(allTimelineItems.length / timelinePerPage));
+  const paginatedTimelineItems = allTimelineItems.slice((timelinePage - 1) * timelinePerPage, timelinePage * timelinePerPage);
+
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Header */}
@@ -1129,77 +1339,148 @@ const Consultations = () => {
           {/* Consultation Summaries List */}
           <Card className="bg-white border-slate-100 shadow-sm rounded-[20px]">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base font-extrabold text-slate-800">Visit Summary Logs</CardTitle>
-              <CardDescription className="text-xs text-slate-400">Summaries, prescriptions and doctor suggestions from completed visits</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base font-extrabold text-slate-800">Visit Summary Logs</CardTitle>
+                  <CardDescription className="text-xs text-slate-400">Summaries, prescriptions and doctor suggestions from completed visits</CardDescription>
+                </div>
+                {allVisitLogs.length > 0 && (
+                  <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-bold text-[10px] px-2 py-0.5">
+                    {allVisitLogs.length} Records
+                  </Badge>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {loading ? (
                 <div className="h-32 bg-slate-50 rounded-xl animate-pulse"></div>
-              ) : (sessions.length === 0 && pastBookings.length === 0) ? (
-                <p className="text-center py-6 text-xs text-slate-400">No summaries logs available yet</p>
+              ) : allVisitLogs.length === 0 ? (
+                <p className="text-center py-6 text-xs text-slate-400">No summary logs available yet</p>
               ) : (
-                <div className="divide-y divide-slate-100">
-                  {pastBookings.slice(0, 3).map((b) => {
-                    const lc = getBookingLifecycle(b);
-                    return (
-                      <div key={b._id || b.id} className="py-4 flex items-center justify-between gap-4">
-                        <div className="flex items-start gap-3">
-                          <div className="h-9 w-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 shrink-0 font-bold text-xs uppercase">
-                            {b.doctorId?.name ? b.doctorId.name[0] : "D"}
+                <div className="space-y-4">
+                  <div className="divide-y divide-slate-100">
+                    {paginatedVisitLogs.map((log) => {
+                      if (log.type === "telehealth" && log.booking) {
+                        const b = log.booking;
+                        const lc = getBookingLifecycle(b);
+                        const isOpeningThisRx = openingRxId === (b._id || b.id);
+
+                        return (
+                          <div key={log.id} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-start gap-3">
+                              <div className="h-9 w-9 rounded-xl bg-blue-50 text-[#2563eb] flex items-center justify-center shrink-0 font-black text-xs uppercase">
+                                {b.doctorId?.name ? b.doctorId.name[0] : "D"}
+                              </div>
+                              <div className="space-y-0.5">
+                                <div className="flex items-center gap-2">
+                                  <h4 className="font-extrabold text-slate-800 text-xs">
+                                    Dr. {b.doctorId?.name || "Medical Practitioner"}
+                                  </h4>
+                                  <Badge className={`${lc.badgeClass} text-[8px] font-bold px-1.5 py-0`}>
+                                    {lc.label}
+                                  </Badge>
+                                </div>
+                                <span className="text-[10px] text-slate-400 font-medium block">
+                                  {lc.formattedTime} • {b.doctorId?.specialty || "Telehealth Consultation"}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                              <Button
+                                onClick={() => handleViewDoctorNotes(b)}
+                                variant="outline"
+                                size="sm"
+                                className="text-[10.5px] font-bold h-7 px-2.5 rounded-lg border-slate-200 text-slate-700 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50/50 flex items-center gap-1 shadow-2xs"
+                                title="View Doctor In-Consultation Notes"
+                              >
+                                <FileText className="h-3 w-3 text-[#2563eb]" />
+                                Doctor Notes
+                              </Button>
+
+                              <Button
+                                onClick={() => handleDirectOpenPrescription(b)}
+                                disabled={isOpeningThisRx}
+                                variant="outline"
+                                size="sm"
+                                className="text-[10.5px] font-bold h-7 px-2.5 rounded-lg border-slate-200 text-slate-700 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50/50 flex items-center gap-1 shadow-2xs"
+                                title="Directly Open Prescription PDF"
+                              >
+                                {isOpeningThisRx ? (
+                                  <RefreshCcw className="h-3 w-3 animate-spin text-[#2563eb]" />
+                                ) : (
+                                  <Printer className="h-3 w-3 text-[#2563eb]" />
+                                )}
+                                Rx PDF
+                              </Button>
+                            </div>
                           </div>
-                          <div>
-                            <h4 className="font-extrabold text-slate-800 text-xs">
-                              {b.doctorId?.name || "Medical Practitioner"}
-                            </h4>
-                            <span className="text-[9px] text-slate-400 font-semibold block mt-0.5">
-                              {lc.formattedTime} • {b.doctorId?.specialty || "Telehealth Consultation"}
-                            </span>
+                        );
+                      }
+
+                      if (log.type === "diagnostic" && log.session) {
+                        const session = log.session;
+                        return (
+                          <div key={log.id} className="py-4 flex items-center justify-between gap-4">
+                            <div className="flex items-start gap-3">
+                              <div className="h-9 w-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
+                                <CheckCircle2 className="h-4.5 w-4.5 text-[#2563eb]" />
+                              </div>
+                              <div>
+                                <h4 className="font-extrabold text-slate-800 text-xs">Diagnostic Checkout Session</h4>
+                                <span className="text-[9px] text-slate-400 font-semibold block mt-0.5">
+                                  Conducted {new Date(session.createdAt).toLocaleDateString()} • {session.productId?.name || "Onyx Diagnostic Device"}
+                                </span>
+                              </div>
+                            </div>
+                            <Button 
+                              onClick={() => {
+                                setSelectedSession(session);
+                                setOpenDetailDialog(true);
+                              }}
+                              variant="ghost" 
+                              size="sm" 
+                              className="text-[#2563eb] font-bold text-xs"
+                            >
+                              View Summary
+                            </Button>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge className={`${lc.badgeClass} text-[8.5px] font-bold px-2 py-0.5`}>
-                            {lc.label}
-                          </Badge>
-                          <Button
-                            onClick={() => navigate("/dashboard/user/prescriptions")}
-                            variant="outline"
-                            size="sm"
-                            className="text-[10px] font-bold h-7 px-2.5 rounded-lg border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-200 flex items-center gap-1"
-                            title="Open Prescription PDF"
-                          >
-                            <FileText className="h-3 w-3 text-[#2563eb]" />
-                            Rx PDF
-                          </Button>
-                        </div>
+                        );
+                      }
+
+                      return null;
+                    })}
+                  </div>
+
+                  {/* Visit Summary Logs Pagination */}
+                  {allVisitLogs.length > logsPerPage && (
+                    <div className="flex items-center justify-between pt-3 border-t border-slate-100 text-xs">
+                      <span className="text-slate-400 text-[11px] font-medium">
+                        Page <span className="font-bold text-slate-700">{logsPage}</span> of{" "}
+                        <span className="font-bold text-slate-700">{totalLogsPages}</span>
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={logsPage <= 1}
+                          onClick={() => setLogsPage(prev => Math.max(prev - 1, 1))}
+                          className="h-7 px-2 text-xs font-bold rounded-lg border-slate-200 hover:bg-slate-50 disabled:opacity-40"
+                        >
+                          <ChevronLeft className="h-3.5 w-3.5 mr-0.5" /> Prev
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={logsPage >= totalLogsPages}
+                          onClick={() => setLogsPage(prev => Math.min(prev + 1, totalLogsPages))}
+                          className="h-7 px-2 text-xs font-bold rounded-lg border-slate-200 hover:bg-slate-50 disabled:opacity-40"
+                        >
+                          Next <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
+                        </Button>
                       </div>
-                    );
-                  })}
-                  {sessions.slice(0, 2).map((session) => (
-                    <div key={session._id || session.id} className="py-4 flex items-center justify-between gap-4">
-                      <div className="flex items-start gap-3">
-                        <div className="h-9 w-9 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
-                          <CheckCircle2 className="h-4.5 w-4.5 text-[#2563eb]" />
-                        </div>
-                        <div>
-                          <h4 className="font-extrabold text-slate-800 text-xs">Diagnostic Checkout Session</h4>
-                          <span className="text-[9px] text-slate-400 font-semibold block mt-0.5">
-                            Conducted {new Date(session.createdAt).toLocaleDateString()}
-                          </span>
-                        </div>
-                      </div>
-                      <Button 
-                        onClick={() => {
-                          setSelectedSession(session);
-                          setOpenDetailDialog(true);
-                        }}
-                        variant="ghost" 
-                        size="sm" 
-                        className="text-[#2563eb] font-bold text-xs"
-                      >
-                        View Summary
-                      </Button>
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
             </CardContent>
@@ -1211,68 +1492,100 @@ const Consultations = () => {
         <div className="lg:col-span-5 space-y-6">
           <Card className="bg-white border-slate-100 shadow-sm rounded-[20px]">
             <CardHeader>
-              <CardTitle className="text-base font-extrabold text-slate-800">Consultation Timeline</CardTitle>
-              <CardDescription className="text-xs text-slate-400">Your health journey and milestone checkups</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base font-extrabold text-slate-800">Consultation Timeline</CardTitle>
+                  <CardDescription className="text-xs text-slate-400">Your health journey and milestone checkups</CardDescription>
+                </div>
+                {allTimelineItems.length > 0 && (
+                  <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-bold text-[10px] px-2 py-0.5">
+                    {allTimelineItems.length} Milestones
+                  </Badge>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {loading ? (
                 <div className="h-32 bg-slate-50 rounded-xl animate-pulse"></div>
-              ) : (pastBookings.length === 0 && sessions.length === 0) ? (
+              ) : allTimelineItems.length === 0 ? (
                 <p className="text-center py-6 text-xs text-slate-400">No consultation history recorded</p>
               ) : (
-                <div className="space-y-6">
-                  {pastBookings.map((b, idx) => {
-                    const lc = getBookingLifecycle(b);
-                    return (
-                      <div key={b._id || b.id} className="flex gap-4 relative">
-                        {idx !== pastBookings.length - 1 && <div className="absolute left-[15px] top-[30px] bottom-[-24px] w-0.5 bg-slate-100"></div>}
-                        
-                        <div className="h-8 w-8 rounded-full border border-slate-200 bg-slate-50 flex items-center justify-center text-[#2563eb] text-xs font-bold shrink-0 shadow-sm">
-                          {idx + 1}
-                        </div>
-                        <div className="space-y-1 bg-slate-50/50 p-4 rounded-xl border border-slate-50 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wider block">
-                              {lc.formattedTime}
-                            </span>
-                            <Badge className={`${lc.badgeClass} text-[8px] font-bold px-2 py-0.5`}>
-                              {lc.label}
-                            </Badge>
+                <div className="space-y-4">
+                  <div className="space-y-5">
+                    {paginatedTimelineItems.map((item, idx) => {
+                      const itemNumber = (timelinePage - 1) * timelinePerPage + idx + 1;
+                      const isLastOnPage = idx === paginatedTimelineItems.length - 1;
+
+                      return (
+                        <div key={item.id} className="flex gap-4 relative">
+                          {!isLastOnPage && (
+                            <div className="absolute left-[15px] top-[30px] bottom-[-20px] w-0.5 bg-slate-100"></div>
+                          )}
+                          
+                          <div className={`h-8 w-8 rounded-full border border-slate-200 flex items-center justify-center text-xs font-bold shrink-0 shadow-xs ${
+                            item.type === "diagnostic" ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-[#2563eb]"
+                          }`}>
+                            {itemNumber}
                           </div>
-                          <h4 className="font-extrabold text-slate-800 text-xs">
-                            {b.doctorId?.name || "Medical Practitioner"}
-                          </h4>
-                          <p className="text-[9.5px] text-slate-500 font-semibold leading-relaxed pt-1">
-                            {lc.category === "missed" 
-                              ? "Appointment time has passed and consultation was not attended."
-                              : lc.category === "completed"
-                              ? "Consultation successfully completed with medical specialist."
-                              : lc.category === "cancelled"
-                              ? "Consultation booking was cancelled."
-                              : "Consultation slot recorded."}
-                          </p>
+
+                          <div className="space-y-1 bg-slate-50/60 hover:bg-slate-50 transition-colors p-3.5 rounded-xl border border-slate-100 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wider block">
+                                {item.formattedTime}
+                              </span>
+                              <Badge className={`${item.badgeClass} text-[8px] font-bold px-2 py-0.5`}>
+                                {item.badgeLabel}
+                              </Badge>
+                            </div>
+                            <h4 className="font-extrabold text-slate-800 text-xs">
+                              {item.title}
+                            </h4>
+                            <p className="text-[9.5px] text-slate-500 font-semibold leading-relaxed pt-0.5">
+                              {item.description}
+                            </p>
+                            {item.booking && (
+                              <button
+                                onClick={() => handleViewDoctorNotes(item.booking!)}
+                                className="mt-1 text-[10px] font-bold text-[#2563eb] hover:underline flex items-center gap-1 cursor-pointer"
+                              >
+                                <FileText className="h-2.5 w-2.5" /> View Doctor Notes & Summary
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                  {sessions.map((session, idx) => (
-                    <div key={session._id || session.id} className="flex gap-4 relative">
-                      {idx !== sessions.length - 1 && <div className="absolute left-[15px] top-[30px] bottom-[-24px] w-0.5 bg-slate-100"></div>}
-                      
-                      <div className="h-8 w-8 rounded-full border border-slate-200 bg-slate-50 flex items-center justify-center text-emerald-600 text-xs font-bold shrink-0 shadow-sm">
-                        {pastBookings.length + idx + 1}
-                      </div>
-                      <div className="space-y-1 bg-slate-50/50 p-4 rounded-xl border border-slate-50 flex-1">
-                        <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wider block">
-                          {new Date(session.createdAt).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
-                        </span>
-                        <h4 className="font-extrabold text-slate-800 text-xs">Diagnostic Checkout Session</h4>
-                        <p className="text-[9.5px] text-slate-500 font-semibold leading-relaxed pt-1">
-                          Diagnosed details synced with diagnostic panel. Medical equipment values recorded.
-                        </p>
+                      );
+                    })}
+                  </div>
+
+                  {/* Timeline Pagination */}
+                  {allTimelineItems.length > timelinePerPage && (
+                    <div className="flex items-center justify-between pt-3 border-t border-slate-100 text-xs">
+                      <span className="text-slate-400 text-[11px] font-medium">
+                        Page <span className="font-bold text-slate-700">{timelinePage}</span> of{" "}
+                        <span className="font-bold text-slate-700">{totalTimelinePages}</span>
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={timelinePage <= 1}
+                          onClick={() => setTimelinePage(prev => Math.max(prev - 1, 1))}
+                          className="h-7 px-2 text-xs font-bold rounded-lg border-slate-200 hover:bg-slate-50 disabled:opacity-40"
+                        >
+                          <ChevronLeft className="h-3.5 w-3.5 mr-0.5" /> Prev
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={timelinePage >= totalTimelinePages}
+                          onClick={() => setTimelinePage(prev => Math.min(prev + 1, totalTimelinePages))}
+                          className="h-7 px-2 text-xs font-bold rounded-lg border-slate-200 hover:bg-slate-50 disabled:opacity-40"
+                        >
+                          Next <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
+                        </Button>
                       </div>
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
             </CardContent>
@@ -1281,12 +1594,12 @@ const Consultations = () => {
 
       </div>
 
-      {/* Summary Logs Dialog */}
+      {/* Diagnostic Session Summary Logs Dialog */}
       <Dialog open={openDetailDialog} onOpenChange={setOpenDetailDialog}>
         <DialogContent className="sm:max-w-md rounded-[20px] p-6 border-none shadow-2xl">
           <DialogHeader>
             <DialogTitle className="text-slate-800 font-black text-xl flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-emerald-500" /> Consultation Summary
+              <CheckCircle2 className="h-5 w-5 text-emerald-500" /> Diagnostic Summary
             </DialogTitle>
             <DialogDescription className="text-slate-500 text-xs">
               Milestone values and diagnostic results recorded during checkout.
@@ -1327,6 +1640,116 @@ const Consultations = () => {
                   className="bg-[#2563eb] text-white font-bold rounded-xl shadow-md text-xs px-5"
                 >
                   Close Summary
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Doctor Consultation Summary & Clinical Notes Dialog */}
+      <Dialog open={!!selectedBookingForNotes} onOpenChange={(open) => !open && setSelectedBookingForNotes(null)}>
+        <DialogContent className="sm:max-w-lg rounded-[22px] p-6 border-none shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-slate-800 font-black text-xl flex items-center gap-2">
+              <Stethoscope className="h-5 w-5 text-[#2563eb]" /> Doctor Consultation Summary
+            </DialogTitle>
+            <DialogDescription className="text-slate-500 text-xs">
+              Clinical observations, doctor's notes, and prescription advice from this visit.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedBookingForNotes && (
+            <div className="space-y-4 mt-2">
+              {/* Doctor Header Card */}
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-blue-50 text-[#2563eb] flex items-center justify-center font-black text-sm uppercase shrink-0">
+                    {selectedBookingForNotes.doctorId?.name ? selectedBookingForNotes.doctorId.name[0] : "D"}
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-slate-800 text-sm">
+                      Dr. {selectedBookingForNotes.doctorId?.name || "Consulting Specialist"}
+                    </h4>
+                    <p className="text-[11px] text-slate-400 font-semibold">
+                      {selectedBookingForNotes.doctorId?.specialty || "Telehealth Consultation"}
+                    </p>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">
+                      {getBookingLifecycle(selectedBookingForNotes).formattedTime}
+                    </span>
+                  </div>
+                </div>
+                <Badge className={`${getBookingLifecycle(selectedBookingForNotes).badgeClass} text-[8.5px] font-bold px-2 py-0.5`}>
+                  {getBookingLifecycle(selectedBookingForNotes).label}
+                </Badge>
+              </div>
+
+              {notesLoading ? (
+                <div className="space-y-3 py-4">
+                  <div className="h-16 bg-slate-50 rounded-xl animate-pulse" />
+                  <div className="h-20 bg-slate-50 rounded-xl animate-pulse" />
+                </div>
+              ) : (
+                <>
+                  {/* Clinical Diagnosis (if present) */}
+                  {bookingNotesData?.diagnosis && (
+                    <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100/70 text-xs text-slate-700 flex items-start gap-2">
+                      <Sparkles className="h-4 w-4 text-[#2563eb] shrink-0 mt-0.5" />
+                      <div>
+                        <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block">Clinical Diagnosis</span>
+                        <span className="font-extrabold text-slate-800">{bookingNotesData.diagnosis}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Doctor In-Consultation Notes */}
+                  <div className="space-y-1.5">
+                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <FileText className="h-3.5 w-3.5 text-[#2563eb]" /> Doctor's Clinical Notes & Advice
+                    </h4>
+                    <div className="p-3.5 bg-slate-50/70 rounded-xl border border-slate-100 text-xs font-medium text-slate-700 leading-relaxed whitespace-pre-wrap">
+                      {bookingNotesData?.notes}
+                    </div>
+                  </div>
+
+                  {/* Prescribed Medications */}
+                  {bookingNotesData?.medications && bookingNotesData.medications.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                        <Pill className="h-3.5 w-3.5 text-[#f2052c]" /> Prescribed Medicines ({bookingNotesData.medications.length})
+                      </h4>
+                      <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                        {bookingNotesData.medications.map((m: any, idx: number) => (
+                          <div key={idx} className="p-2.5 rounded-lg bg-white border border-slate-100 flex items-center justify-between text-xs">
+                            <div className="font-bold text-slate-800">{m.name || (typeof m === 'string' ? m : "Medicine")}</div>
+                            <div className="text-[10.5px] text-slate-500 font-semibold">{m.dosage || m.frequency || "As prescribed"}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              <DialogFooter className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-3 border-t border-slate-100">
+                {bookingNotesData?.prescriptionObj ? (
+                  <Button
+                    onClick={() => {
+                      handleDirectOpenPrescription(selectedBookingForNotes);
+                    }}
+                    className="w-full sm:w-auto bg-[#2563eb] text-white font-bold rounded-xl shadow-xs text-xs px-4 h-9 flex items-center gap-1.5"
+                  >
+                    <Printer className="h-3.5 w-3.5" /> Open Official Prescription PDF
+                  </Button>
+                ) : (
+                  <div />
+                )}
+                <Button 
+                  variant="outline"
+                  onClick={() => setSelectedBookingForNotes(null)}
+                  className="w-full sm:w-auto border-slate-200 text-slate-700 font-bold rounded-xl text-xs px-4 h-9"
+                >
+                  Close
                 </Button>
               </DialogFooter>
             </div>

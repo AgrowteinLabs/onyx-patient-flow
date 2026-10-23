@@ -19,6 +19,7 @@ import {
   CheckCircle2, 
   XCircle, 
   ChevronRight, 
+  ChevronLeft,
   Star,
   MapPin,
   ShieldCheck,
@@ -448,6 +449,30 @@ const Appointments = () => {
     });
   }, [bookings]);
 
+  // Pagination states for History
+  const [pastPage, setPastPage] = useState(1);
+  const pastPerPage = 5;
+  const totalPastPages = Math.ceil(past.length / pastPerPage) || 1;
+  const paginatedPast = useMemo(() => {
+    return past.slice((pastPage - 1) * pastPerPage, pastPage * pastPerPage);
+  }, [past, pastPage]);
+
+  // Doctor panel search & pagination in Appointments
+  const [doctorSearch, setDoctorSearch] = useState("");
+  const [doctorPage, setDoctorPage] = useState(1);
+  const doctorsPerPage = 3;
+  const filteredPanelDoctors = useMemo(() => {
+    return doctors.filter(
+      (d) =>
+        d.name?.toLowerCase().includes(doctorSearch.toLowerCase()) ||
+        d.specialty?.toLowerCase().includes(doctorSearch.toLowerCase())
+    );
+  }, [doctors, doctorSearch]);
+  const totalDoctorPages = Math.ceil(filteredPanelDoctors.length / doctorsPerPage) || 1;
+  const paginatedDoctors = useMemo(() => {
+    return filteredPanelDoctors.slice((doctorPage - 1) * doctorsPerPage, doctorPage * doctorsPerPage);
+  }, [filteredPanelDoctors, doctorPage]);
+
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Header */}
@@ -554,30 +579,63 @@ const Appointments = () => {
               ) : past.length === 0 ? (
                 <p className="text-center py-6 text-xs text-slate-400">No consultation history recorded</p>
               ) : (
-                <div className="divide-y divide-slate-100">
-                  {past.map((b) => {
-                    const lifecycle = getBookingLifecycle(b);
-                    return (
-                      <div key={b._id || b.id} className="py-4 flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-xs uppercase shrink-0">
-                            {b.doctorId?.name ? b.doctorId.name[0] : "D"}
+                <div className="space-y-3">
+                  <div className="divide-y divide-slate-100">
+                    {paginatedPast.map((b) => {
+                      const lifecycle = getBookingLifecycle(b);
+                      return (
+                        <div key={b._id || b.id} className="py-4 flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3">
+                            <div className="h-9 w-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-xs uppercase shrink-0">
+                              {b.doctorId?.name ? b.doctorId.name[0] : "D"}
+                            </div>
+                            <div>
+                              <h4 className="font-extrabold text-slate-800 text-xs">{b.doctorId?.name || "Medical Practitioner"}</h4>
+                              <span className="text-[9px] text-slate-400 font-medium block">
+                                {lifecycle.formattedTime}
+                              </span>
+                            </div>
                           </div>
-                          <div>
-                            <h4 className="font-extrabold text-slate-800 text-xs">{b.doctorId?.name || "Medical Practitioner"}</h4>
-                            <span className="text-[9px] text-slate-400 font-medium block">
-                              {lifecycle.formattedTime}
-                            </span>
+                          <div className="flex items-center gap-2">
+                            <Badge className={`${lifecycle.badgeClass} text-[8.5px] font-bold px-2 py-0.5`}>
+                              {lifecycle.label}
+                            </Badge>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Badge className={`${lifecycle.badgeClass} text-[8.5px] font-bold px-2 py-0.5`}>
-                            {lifecycle.label}
-                          </Badge>
-                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {past.length > pastPerPage && (
+                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                      <span className="font-semibold text-[10.5px] text-slate-400">
+                        Showing {(pastPage - 1) * pastPerPage + 1} - {Math.min(pastPage * pastPerPage, past.length)} of {past.length}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPastPage((p) => Math.max(1, p - 1))}
+                          disabled={pastPage === 1}
+                          className="h-7 px-2.5 rounded-lg border-slate-200 text-xs font-bold"
+                        >
+                          <ChevronLeft className="h-3.5 w-3.5 mr-0.5" /> Prev
+                        </Button>
+                        <span className="px-1.5 font-mono text-[11px] font-bold text-slate-700">
+                          {pastPage} / {totalPastPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPastPage((p) => Math.min(totalPastPages, p + 1))}
+                          disabled={pastPage >= totalPastPages}
+                          className="h-7 px-2.5 rounded-lg border-slate-200 text-xs font-bold"
+                        >
+                          Next <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
+                        </Button>
                       </div>
-                    );
-                  })}
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -587,42 +645,95 @@ const Appointments = () => {
         {/* Right: Quick Doctor Availability list */}
         <div className="lg:col-span-4 space-y-6">
           <Card className="bg-white border-slate-100 shadow-sm rounded-[20px]">
-            <CardHeader>
-              <CardTitle className="text-base font-extrabold text-slate-800">Our Panel Doctors</CardTitle>
-              <CardDescription className="text-xs text-slate-400">Consult top rated experts instantly</CardDescription>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base font-extrabold text-slate-800">Our Panel Doctors</CardTitle>
+                  <CardDescription className="text-xs text-slate-400">Consult top rated experts instantly</CardDescription>
+                </div>
+                <Badge className="bg-blue-50 text-[#2563eb] border-none text-[10px] font-bold">
+                  {doctors.length} Doctors
+                </Badge>
+              </div>
+
+              {/* Quick Search */}
+              <div className="pt-2">
+                <input
+                  type="text"
+                  placeholder="Search doctor or specialty..."
+                  value={doctorSearch}
+                  onChange={(e) => {
+                    setDoctorSearch(e.target.value);
+                    setDoctorPage(1);
+                  }}
+                  className="w-full h-8 px-3 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-blue-400 font-medium"
+                />
+              </div>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {doctors.slice(0, 3).map((doc) => (
-                <div key={doc._id || doc.id} className="p-4 rounded-xl border border-slate-50 bg-slate-50/50 flex flex-col gap-3">
-                  <div className="flex items-start gap-3">
-                    <div className="h-10 w-10 rounded-full bg-[#0ea5e9]/10 text-[#2563eb] flex items-center justify-center font-bold text-sm uppercase shrink-0">
-                      {doc.name[0]}
-                    </div>
-                    <div className="space-y-0.5 overflow-hidden">
-                      <h4 className="font-extrabold text-xs text-slate-800 truncate">{doc.name}</h4>
-                      <p className="text-[10px] text-slate-400 font-medium capitalize truncate">{doc.specialty}</p>
-                      <div className="flex items-center gap-1.5 pt-0.5">
-                        <div className="flex items-center text-amber-500">
-                          <Star className="h-3 w-3 fill-current" />
-                          <span className="text-[10px] font-bold text-slate-700 ml-0.5">{doc.rating || "4.8"}</span>
+            <CardContent className="space-y-3">
+              {paginatedDoctors.length === 0 ? (
+                <p className="text-center py-6 text-xs text-slate-400 font-medium">No doctors match your search</p>
+              ) : (
+                paginatedDoctors.map((doc) => (
+                  <div key={doc._id || doc.id} className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/60 hover:bg-slate-50 transition-colors flex flex-col gap-2.5">
+                    <div className="flex items-start gap-3">
+                      <div className="h-10 w-10 rounded-full bg-[#0ea5e9]/10 text-[#2563eb] flex items-center justify-center font-bold text-sm uppercase shrink-0 shadow-2xs">
+                        {doc.name[0]}
+                      </div>
+                      <div className="space-y-0.5 overflow-hidden flex-1">
+                        <h4 className="font-extrabold text-xs text-slate-800 truncate">{doc.name}</h4>
+                        <p className="text-[10px] text-slate-500 font-semibold capitalize truncate">{doc.specialty}</p>
+                        <div className="flex items-center gap-1.5 pt-0.5">
+                          <div className="flex items-center text-amber-500">
+                            <Star className="h-3 w-3 fill-current" />
+                            <span className="text-[10px] font-bold text-slate-700 ml-0.5">{doc.rating || "4.8"}</span>
+                          </div>
+                          <span className="text-[9px] text-slate-400 font-medium">({doc.experience || "10+ Yrs Exp"})</span>
                         </div>
-                        <span className="text-[9px] text-slate-400 font-medium">({doc.experience || "10+ Yrs Exp"})</span>
                       </div>
                     </div>
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="w-full text-xs font-bold rounded-xl border-slate-200 hover:bg-blue-50/50 hover:text-[#2563eb] hover:border-blue-200 bg-white shadow-2xs h-8"
+                      onClick={() => {
+                        setOpenBookModal(true);
+                        handleDoctorChange(doc._id || doc.id || "");
+                      }}
+                    >
+                      Book Consultation
+                    </Button>
                   </div>
-                  <Button 
-                    size="sm" 
-                    variant="outline" 
-                    className="w-full text-xs font-bold rounded-xl border-slate-200 hover:bg-slate-50 bg-white shadow-sm"
-                    onClick={() => {
-                      setOpenBookModal(true);
-                      handleDoctorChange(doc._id || doc.id || "");
-                    }}
-                  >
-                    Check Availability
-                  </Button>
+                ))
+              )}
+
+              {filteredPanelDoctors.length > doctorsPerPage && (
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                  <span className="font-semibold text-slate-400 text-[10px]">
+                    Page {doctorPage} of {totalDoctorPages}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDoctorPage((p) => Math.max(1, p - 1))}
+                      disabled={doctorPage === 1}
+                      className="h-7 px-2 rounded-lg border-slate-200 text-[10px] font-bold"
+                    >
+                      Prev
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDoctorPage((p) => Math.min(totalDoctorPages, p + 1))}
+                      disabled={doctorPage >= totalDoctorPages}
+                      className="h-7 px-2 rounded-lg border-slate-200 text-[10px] font-bold"
+                    >
+                      Next
+                    </Button>
+                  </div>
                 </div>
-              ))}
+              )}
             </CardContent>
           </Card>
         </div>

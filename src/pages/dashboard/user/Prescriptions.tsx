@@ -13,7 +13,10 @@ import {
   RefreshCcw,
   Printer,
   Clock,
-  Sparkles
+  Sparkles,
+  ChevronLeft,
+  ChevronRight,
+  Stethoscope
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { listBookings, getPrescription, Booking } from "@/services/booking.service";
@@ -54,6 +57,11 @@ const Prescriptions = () => {
   const { toast } = useToast();
   const [prescriptions, setPrescriptions] = useState<PrescriptionRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [rxPage, setRxPage] = useState(1);
+  const rxPerPage = 3;
+
+  const totalRxPages = Math.max(1, Math.ceil(prescriptions.length / rxPerPage));
+  const paginatedRxs = prescriptions.slice((rxPage - 1) * rxPerPage, rxPage * rxPerPage);
 
   const loadPrescriptions = async () => {
     setLoading(true);
@@ -221,114 +229,182 @@ const Prescriptions = () => {
                 </div>
               ) : (
                 <div className="space-y-5">
-                  {prescriptions.map((p) => (
-                    <div key={p.id} className="p-5 rounded-2xl border border-slate-100 bg-slate-50/70 hover:bg-slate-50 transition-colors flex flex-col gap-4 shadow-2xs">
-                      
-                      {/* Doctor info & Actions */}
-                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                        <div className="flex items-start gap-3.5">
-                          <div className="h-11 w-11 rounded-2xl bg-blue-50 text-[#2563eb] flex items-center justify-center shrink-0 font-black text-sm uppercase">
-                            {p.doctorName ? p.doctorName[0] : "D"}
-                          </div>
-                          <div className="space-y-0.5">
+                  <div className="space-y-5">
+                    {paginatedRxs.map((p, idx) => {
+                      const consultCode = p.bookingId && p.bookingId.length >= 6 
+                        ? p.bookingId.slice(-6).toUpperCase() 
+                        : String((rxPage - 1) * rxPerPage + idx + 1).padStart(4, '0');
+
+                      return (
+                        <div key={p.id} className="p-5 rounded-2xl border border-slate-100 bg-slate-50/70 hover:bg-slate-50 transition-colors flex flex-col gap-4 shadow-2xs">
+                          
+                          {/* Consultation Context Header */}
+                          <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200/70">
                             <div className="flex items-center gap-2">
-                              <h3 className="font-extrabold text-slate-800 text-sm tracking-wide">Dr. {p.doctorName}</h3>
-                              <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[8.5px] px-2 py-0.5">
-                                Verified Digital Rx
+                              <Badge className="bg-blue-50 text-[#2563eb] border border-blue-200 font-extrabold text-[10px] px-2.5 py-1 flex items-center gap-1.5">
+                                <Stethoscope className="h-3 w-3" /> Consultation #{consultCode}
                               </Badge>
+                              <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1">
+                                <Clock className="h-3 w-3 text-slate-400" />
+                                {new Date(p.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
+                              </span>
                             </div>
-                            <p className="text-[11px] text-slate-400 font-semibold">{p.doctorSpecialty || "General Medicine"}</p>
-                            <span className="text-[10px] text-slate-400 font-medium block">
-                              Prescribed on {new Date(p.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
+                            <Badge className={`${p.status === "completed" ? "bg-slate-100 text-slate-600" : "bg-emerald-50 text-emerald-700 border border-emerald-200"} font-bold text-[9px] px-2 py-0.5`}>
+                              {p.status === "completed" ? "Completed Visit" : "Active Prescription"}
+                            </Badge>
+                          </div>
+
+                          {/* Doctor info & Actions */}
+                          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                            <div className="flex items-start gap-3.5">
+                              <div className="h-11 w-11 rounded-2xl bg-blue-50 text-[#2563eb] flex items-center justify-center shrink-0 font-black text-sm uppercase">
+                                {p.doctorName ? p.doctorName[0] : "D"}
+                              </div>
+                              <div className="space-y-0.5">
+                                <div className="flex items-center gap-2">
+                                  <h3 className="font-extrabold text-slate-800 text-sm tracking-wide">Dr. {p.doctorName}</h3>
+                                  <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[8.5px] px-2 py-0.5">
+                                    Verified Digital Rx
+                                  </Badge>
+                                </div>
+                                <p className="text-[11px] text-slate-400 font-semibold">{p.doctorSpecialty || "General Medicine"}</p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 self-start sm:self-auto">
+                              <Button 
+                                onClick={() => handlePrint(p)}
+                                variant="outline" 
+                                size="sm" 
+                                className="text-xs font-bold rounded-xl border-slate-200 bg-white hover:bg-slate-100 shadow-2xs h-9 px-3.5"
+                              >
+                                <Printer className="h-3.5 w-3.5 mr-1.5 text-slate-500" /> Print / PDF
+                              </Button>
+                            </div>
+                          </div>
+
+                          {/* Diagnosis Section */}
+                          {p.diagnosis && (
+                            <div className="p-3 bg-blue-50/40 rounded-xl border border-blue-100/60 text-xs text-slate-700 flex items-start gap-2">
+                              <Sparkles className="h-4 w-4 text-[#2563eb] shrink-0 mt-0.5" />
+                              <div>
+                                <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block">Clinical Diagnosis</span>
+                                <span className="font-extrabold text-slate-800">{p.diagnosis}</span>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Medications list */}
+                          <div className="space-y-2">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                              Prescribed Medication ({p.medications.length})
+                            </span>
+                            <div className="space-y-2">
+                              {p.medications.map((m, mIdx) => (
+                                <div key={mIdx} className="p-3 bg-white rounded-xl border border-slate-100 shadow-2xs space-y-2">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <Pill className="h-4 w-4 text-[#f2052c] shrink-0" />
+                                      <h4 className="font-extrabold text-xs text-slate-800">{m.name}</h4>
+                                    </div>
+                                    {m.duration && (
+                                      <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-bold text-[9px] border-none px-2 py-0.5">
+                                        {m.duration}
+                                      </Badge>
+                                    )}
+                                  </div>
+
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] text-slate-600 bg-slate-50/70 p-2 rounded-lg">
+                                    <div>
+                                      <span className="text-[9px] text-slate-400 block font-semibold">Dosage</span>
+                                      <span className="font-bold text-slate-700">{m.dosage || "1 Unit"}</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-[9px] text-slate-400 block font-semibold">Frequency</span>
+                                      <span className="font-bold text-slate-700">{m.frequency || "As prescribed"}</span>
+                                    </div>
+                                    <div className="col-span-2 sm:col-span-1">
+                                      <span className="text-[9px] text-slate-400 block font-semibold">Instructions</span>
+                                      <span className="font-medium text-slate-600 truncate block">{m.instructions || "Follow doctor guidance"}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Clinical Notes warning / advice */}
+                          {p.clinicalNotes && (
+                            <div className="flex items-start gap-2 text-[11px] text-amber-800 bg-amber-50/60 p-3 rounded-xl border border-amber-100">
+                              <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                              <div>
+                                <span className="font-bold text-[9.5px] uppercase tracking-wider block text-amber-700">Doctor's Advice & Notes</span>
+                                <span className="leading-relaxed font-semibold">{p.clinicalNotes}</span>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Digital signature footer note */}
+                          <div className="pt-1 border-t border-slate-200/60 flex items-center justify-between text-[10px] text-slate-400">
+                            <span className="flex items-center gap-1 font-semibold text-emerald-600">
+                              <ShieldCheck className="h-3.5 w-3.5" /> Digitally Signed by Dr. {p.doctorName}
+                            </span>
+                            <span className="font-mono text-[9px]">
+                              {p.doctorDigitalSignature?.registrationNumber || "MCI-REGISTERED"}
                             </span>
                           </div>
+
                         </div>
+                      );
+                    })}
+                  </div>
 
-                        <div className="flex items-center gap-2 self-start sm:self-auto">
-                          <Button 
-                            onClick={() => handlePrint(p)}
-                            variant="outline" 
-                            size="sm" 
-                            className="text-xs font-bold rounded-xl border-slate-200 bg-white hover:bg-slate-100 shadow-2xs h-9 px-3.5"
-                          >
-                            <Printer className="h-3.5 w-3.5 mr-1.5 text-slate-500" /> Print / PDF
-                          </Button>
-                        </div>
-                      </div>
-
-                      {/* Diagnosis Section */}
-                      {p.diagnosis && (
-                        <div className="p-3 bg-blue-50/40 rounded-xl border border-blue-100/60 text-xs text-slate-700 flex items-start gap-2">
-                          <Sparkles className="h-4 w-4 text-[#2563eb] shrink-0 mt-0.5" />
-                          <div>
-                            <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider block">Clinical Diagnosis</span>
-                            <span className="font-extrabold text-slate-800">{p.diagnosis}</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Medications list */}
-                      <div className="space-y-2">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                          Prescribed Medication ({p.medications.length})
-                        </span>
-                        <div className="space-y-2">
-                          {p.medications.map((m, idx) => (
-                            <div key={idx} className="p-3 bg-white rounded-xl border border-slate-100 shadow-2xs space-y-2">
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-2">
-                                  <Pill className="h-4 w-4 text-[#f2052c] shrink-0" />
-                                  <h4 className="font-extrabold text-xs text-slate-800">{m.name}</h4>
-                                </div>
-                                {m.duration && (
-                                  <Badge variant="secondary" className="bg-slate-100 text-slate-600 font-bold text-[9px] border-none px-2 py-0.5">
-                                    {m.duration}
-                                  </Badge>
-                                )}
-                              </div>
-
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] text-slate-600 bg-slate-50/70 p-2 rounded-lg">
-                                <div>
-                                  <span className="text-[9px] text-slate-400 block font-semibold">Dosage</span>
-                                  <span className="font-bold text-slate-700">{m.dosage || "1 Unit"}</span>
-                                </div>
-                                <div>
-                                  <span className="text-[9px] text-slate-400 block font-semibold">Frequency</span>
-                                  <span className="font-bold text-slate-700">{m.frequency || "As prescribed"}</span>
-                                </div>
-                                <div className="col-span-2 sm:col-span-1">
-                                  <span className="text-[9px] text-slate-400 block font-semibold">Instructions</span>
-                                  <span className="font-medium text-slate-600 truncate block">{m.instructions || "Follow doctor guidance"}</span>
-                                </div>
-                              </div>
-                            </div>
+                  {/* Pagination Controls */}
+                  {prescriptions.length > rxPerPage && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-100">
+                      <p className="text-xs text-slate-500 font-medium">
+                        Showing <span className="font-bold text-slate-700">{(rxPage - 1) * rxPerPage + 1}</span> to{" "}
+                        <span className="font-bold text-slate-700">{Math.min(rxPage * rxPerPage, prescriptions.length)}</span> of{" "}
+                        <span className="font-bold text-slate-700">{prescriptions.length}</span> prescriptions
+                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={rxPage <= 1}
+                          onClick={() => setRxPage(prev => Math.max(prev - 1, 1))}
+                          className="h-8 px-2.5 text-xs font-bold rounded-lg border-slate-200 hover:bg-slate-50 disabled:opacity-40"
+                        >
+                          <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Previous
+                        </Button>
+                        <div className="flex items-center gap-1 px-1">
+                          {Array.from({ length: totalRxPages }, (_, i) => i + 1).map((pageNum) => (
+                            <button
+                              key={pageNum}
+                              onClick={() => setRxPage(pageNum)}
+                              className={`h-7 w-7 rounded-lg text-xs font-bold transition-all ${
+                                rxPage === pageNum
+                                  ? "bg-[#2563eb] text-white shadow-xs"
+                                  : "text-slate-600 hover:bg-slate-100"
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
                           ))}
                         </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={rxPage >= totalRxPages}
+                          onClick={() => setRxPage(prev => Math.min(prev + 1, totalRxPages))}
+                          className="h-8 px-2.5 text-xs font-bold rounded-lg border-slate-200 hover:bg-slate-50 disabled:opacity-40"
+                        >
+                          Next <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                        </Button>
                       </div>
-
-                      {/* Clinical Notes warning / advice */}
-                      {p.clinicalNotes && (
-                        <div className="flex items-start gap-2 text-[11px] text-amber-800 bg-amber-50/60 p-3 rounded-xl border border-amber-100">
-                          <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                          <div>
-                            <span className="font-bold text-[9.5px] uppercase tracking-wider block text-amber-700">Doctor's Advice & Notes</span>
-                            <span className="leading-relaxed font-semibold">{p.clinicalNotes}</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Digital signature footer note */}
-                      <div className="pt-1 border-t border-slate-200/60 flex items-center justify-between text-[10px] text-slate-400">
-                        <span className="flex items-center gap-1 font-semibold text-emerald-600">
-                          <ShieldCheck className="h-3.5 w-3.5" /> Digitally Signed by Dr. {p.doctorName}
-                        </span>
-                        <span className="font-mono text-[9px]">
-                          {p.doctorDigitalSignature?.registrationNumber || "MCI-REGISTERED"}
-                        </span>
-                      </div>
-
                     </div>
-                  ))}
+                  )}
+
                 </div>
               )}
             </CardContent>
@@ -339,8 +415,8 @@ const Prescriptions = () => {
         <div className="lg:col-span-4 space-y-6">
           <Card className="bg-white border-slate-100 shadow-sm rounded-[20px]">
             <CardHeader>
-              <CardTitle className="text-base font-extrabold text-slate-800">Pharmacy & Summary</CardTitle>
-              <CardDescription className="text-xs text-slate-400">Quick overview of current prescription records</CardDescription>
+              <CardTitle className="text-base font-extrabold text-slate-800">Prescription Summary</CardTitle>
+              <CardDescription className="text-xs text-slate-400">Quick list of all issued consultation prescriptions</CardDescription>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -349,26 +425,36 @@ const Prescriptions = () => {
                 <p className="text-center py-6 text-xs text-slate-400">No past prescriptions recorded</p>
               ) : (
                 <div className="divide-y divide-slate-100">
-                  {prescriptions.map((p) => (
-                    <div key={p.id} className="py-3.5 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-lg bg-blue-50 text-[#2563eb] flex items-center justify-center shrink-0">
-                          <FileCheck className="h-4 w-4" />
+                  {prescriptions.map((p, pIdx) => {
+                    const cCode = p.bookingId && p.bookingId.length >= 6 
+                      ? p.bookingId.slice(-6).toUpperCase() 
+                      : String(pIdx + 1).padStart(4, '0');
+                    return (
+                      <div key={p.id} className="py-3 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="h-8 w-8 rounded-lg bg-blue-50 text-[#2563eb] flex items-center justify-center shrink-0">
+                            <FileCheck className="h-4 w-4" />
+                          </div>
+                          <div className="overflow-hidden">
+                            <h4 className="font-extrabold text-slate-800 text-xs truncate">
+                              {p.medications[0]?.name || "Prescription"}
+                            </h4>
+                            <span className="text-[9px] text-slate-400 font-medium block truncate">
+                              Dr. {p.doctorName} • #{cCode}
+                            </span>
+                          </div>
                         </div>
-                        <div className="overflow-hidden">
-                          <h4 className="font-extrabold text-slate-800 text-xs truncate max-w-[140px]">
-                            {p.medications[0]?.name || "Prescription"}
-                          </h4>
-                          <span className="text-[9px] text-slate-400 font-medium block">
-                            Dr. {p.doctorName} • {new Date(p.date).toLocaleDateString()}
-                          </span>
-                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handlePrint(p)}
+                          className="h-7 px-2.5 text-[10.5px] font-bold text-[#2563eb] border-blue-200 hover:bg-blue-50 rounded-lg flex items-center gap-1 shrink-0"
+                        >
+                          <Printer className="h-3 w-3" /> PDF
+                        </Button>
                       </div>
-                      <Badge className="bg-emerald-50 text-emerald-700 font-bold border-none text-[8.5px] px-2 py-0.5">
-                        Active
-                      </Badge>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
