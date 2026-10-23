@@ -15,8 +15,7 @@ import {
   Clock,
   Sparkles,
   ChevronLeft,
-  ChevronRight,
-  Stethoscope
+  ChevronRight
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { listBookings, getPrescription, Booking } from "@/services/booking.service";
@@ -57,16 +56,11 @@ const Prescriptions = () => {
   const { toast } = useToast();
   const [prescriptions, setPrescriptions] = useState<PrescriptionRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedBookingId, setSelectedBookingId] = useState<string>("all");
   const [rxPage, setRxPage] = useState(1);
-  const rxPerPage = 2;
+  const rxPerPage = 3;
 
-  const filteredRxs = selectedBookingId === "all"
-    ? prescriptions
-    : prescriptions.filter(p => p.bookingId === selectedBookingId);
-
-  const totalRxPages = Math.max(1, Math.ceil(filteredRxs.length / rxPerPage));
-  const paginatedRxs = filteredRxs.slice((rxPage - 1) * rxPerPage, rxPage * rxPerPage);
+  const totalRxPages = Math.max(1, Math.ceil(prescriptions.length / rxPerPage));
+  const paginatedRxs = prescriptions.slice((rxPage - 1) * rxPerPage, rxPage * rxPerPage);
 
   const loadPrescriptions = async () => {
     setLoading(true);
@@ -230,43 +224,6 @@ const Prescriptions = () => {
             </Card>
           ) : (
             <div className="space-y-6">
-              {/* Consultation Switcher Tabs / Filter Bar */}
-              <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
-                  <button
-                    onClick={() => { setSelectedBookingId("all"); setRxPage(1); }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                      selectedBookingId === "all"
-                        ? "bg-[#2563eb] text-white shadow-xs"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }`}
-                  >
-                    All Consultations ({prescriptions.length})
-                  </button>
-                  {prescriptions.map((p, idx) => {
-                    const cCode = p.bookingId && p.bookingId.length >= 6 ? p.bookingId.slice(-6).toUpperCase() : `${idx + 1}`;
-                    const isSelected = selectedBookingId === p.bookingId;
-                    return (
-                      <button
-                        key={p.id}
-                        onClick={() => { setSelectedBookingId(p.bookingId); setRxPage(1); }}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
-                          isSelected
-                            ? "bg-[#2563eb] text-white shadow-xs"
-                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                        }`}
-                      >
-                        <Stethoscope className="h-3 w-3" />
-                        <span>#{cCode} • Dr. {p.doctorName.split(" ")[0]}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <span className="text-[11px] text-slate-400 font-semibold shrink-0">
-                  Showing {filteredRxs.length} Consultation{filteredRxs.length !== 1 ? 's' : ''}
-                </span>
-              </div>
-
               {/* Distinct Consultation Cards */}
               <div className="space-y-6">
                 {paginatedRxs.map((p, idx) => {
@@ -436,12 +393,12 @@ const Prescriptions = () => {
               </div>
 
               {/* Pagination Controls */}
-              {filteredRxs.length > rxPerPage && (
+              {prescriptions.length > rxPerPage && (
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-200">
                   <p className="text-xs text-slate-500 font-medium">
                     Showing <span className="font-bold text-slate-700">{(rxPage - 1) * rxPerPage + 1}</span> to{" "}
-                    <span className="font-bold text-slate-700">{Math.min(rxPage * rxPerPage, filteredRxs.length)}</span> of{" "}
-                    <span className="font-bold text-slate-700">{filteredRxs.length}</span> consultation prescriptions
+                    <span className="font-bold text-slate-700">{Math.min(rxPage * rxPerPage, prescriptions.length)}</span> of{" "}
+                    <span className="font-bold text-slate-700">{prescriptions.length}</span> consultation prescriptions
                   </p>
                   <div className="flex items-center gap-1.5">
                     <Button
@@ -489,7 +446,7 @@ const Prescriptions = () => {
           <Card className="bg-white border-slate-100 shadow-sm rounded-[24px]">
             <CardHeader className="pb-3">
               <CardTitle className="text-base font-extrabold text-slate-800">Prescription Summary</CardTitle>
-              <CardDescription className="text-xs text-slate-400">Click a consultation to view or print</CardDescription>
+              <CardDescription className="text-xs text-slate-400">Quick access to all consultation records</CardDescription>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -502,23 +459,15 @@ const Prescriptions = () => {
                     const cCode = p.bookingId && p.bookingId.length >= 6 
                       ? p.bookingId.slice(-6).toUpperCase() 
                       : String(pIdx + 1).padStart(4, '0');
-                    const isSelected = selectedBookingId === p.bookingId;
 
                     return (
                       <div 
                         key={p.id} 
-                        onClick={() => {
-                          setSelectedBookingId(p.bookingId);
-                          setRxPage(1);
-                        }}
-                        className={`py-3 px-2 rounded-xl transition-all cursor-pointer flex items-center justify-between gap-3 ${
-                          isSelected ? "bg-blue-50/70 border border-blue-200 ring-1 ring-blue-300" : "hover:bg-slate-50"
-                        }`}
+                        onClick={() => handlePrint(p)}
+                        className="py-3 px-2 rounded-xl transition-all hover:bg-blue-50/50 cursor-pointer flex items-center justify-between gap-3"
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 font-bold text-xs ${
-                            isSelected ? "bg-[#2563eb] text-white" : "bg-blue-50 text-[#2563eb]"
-                          }`}>
+                          <div className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0 font-bold text-xs bg-blue-50 text-[#2563eb]">
                             #{pIdx + 1}
                           </div>
                           <div className="overflow-hidden">
