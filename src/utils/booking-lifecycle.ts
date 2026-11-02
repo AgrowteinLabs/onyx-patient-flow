@@ -89,11 +89,53 @@ export const getBookingLifecycle = (b: Booking): BookingLifecycle => {
     };
   }
 
+  if (rawStatus === "rejected") {
+    return {
+      category: "cancelled",
+      label: "Doctor Declined",
+      badgeClass: "bg-rose-50 text-rose-600 border border-rose-200",
+      isPast: true,
+      startTime,
+      endTime,
+      formattedTime: formatBookingTime(startTime),
+    };
+  }
+
+  if (rawStatus === "expired") {
+    return {
+      category: "missed",
+      label: "Expired",
+      badgeClass: "bg-slate-100 text-slate-500 border border-slate-200",
+      isPast: true,
+      startTime,
+      endTime,
+      formattedTime: formatBookingTime(startTime),
+    };
+  }
+
+  if (rawStatus === "postponed") {
+    return {
+      category: "upcoming",
+      label: "Postponed by Doctor",
+      badgeClass: "bg-amber-50 text-amber-800 border border-amber-200",
+      isPast: false,
+      startTime,
+      endTime,
+      formattedTime: formatBookingTime(startTime),
+    };
+  }
+
   // 2. Active in-progress call
-  if (rawStatus === "in_progress" || rawStatus === "calling" || rawStatus === "active") {
+  if (
+    rawStatus === "in_consultation" ||
+    rawStatus === "in_progress" ||
+    rawStatus === "in progress" ||
+    rawStatus === "calling" ||
+    rawStatus === "active"
+  ) {
     return {
       category: "ready",
-      label: "In Progress",
+      label: "In Progress / Live Call",
       badgeClass: "bg-emerald-500 text-white animate-pulse border-none",
       isPast: false,
       startTime,

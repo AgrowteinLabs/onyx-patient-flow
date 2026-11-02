@@ -45,19 +45,19 @@ const Sidebar = () => {
         path: "/dashboard/user",
       },
       {
-        label: "My Profiles",
+        label: "Profile",
         icon: Users,
         path: "/dashboard/user/profiles",
       },
       {
-        label: "Appointments",
+        label: "Appointment",
         icon: Calendar,
         path: "/dashboard/user/appointments",
       },
       {
-        label: "Reports",
-        icon: FileText,
-        path: "/dashboard/user/reports",
+        label: "Consultation",
+        icon: Video,
+        path: "/dashboard/user/consultations",
       },
       {
         label: "Prescriptions",
@@ -65,14 +65,9 @@ const Sidebar = () => {
         path: "/dashboard/user/prescriptions",
       },
       {
-        label: "Consultations",
-        icon: Video,
-        path: "/dashboard/user/consultations",
-      },
-      {
-        label: "Doctors",
-        icon: Stethoscope,
-        path: "/dashboard/user/doctors",
+        label: "Report",
+        icon: FileText,
+        path: "/dashboard/user/reports",
       },
       {
         label: "Support Tickets",
