@@ -68,7 +68,7 @@ const Prescriptions = () => {
       const storedProfileId = localStorage.getItem("selectedProfileId");
       const bookings = await listBookings();
       const profileBookings = (Array.isArray(bookings) ? bookings : []).filter(
-        b => b && (b.profileId === storedProfileId || !b.profileId)
+        b => { if (!b) return false; const pId = typeof b.profileId === "string" ? b.profileId : b.profileId?._id || b.profileId?.id; return pId === storedProfileId || !pId; }
       );
 
       // Filter to bookings that can realistically have a prescription issued

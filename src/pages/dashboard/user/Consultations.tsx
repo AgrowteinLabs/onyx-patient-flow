@@ -322,7 +322,7 @@ const Consultations = () => {
 
       const bookingsArr = Array.isArray(bookingsList) ? bookingsList : [];
       const profileBookings = bookingsArr.filter(
-        b => b && (b.profileId === storedProfileId || !b.profileId)
+        b => { if (!b) return false; const pId = typeof b.profileId === "string" ? b.profileId : b.profileId?._id || b.profileId?.id; return pId === storedProfileId || !pId; }
       );
 
       // Filter upcoming vs past based on true lifecycle
@@ -396,6 +396,71 @@ const Consultations = () => {
       });
     });
 
+    const unbindAdmitted = presenceService.on("patient-admitted", (data) => {
+      console.log("Patient admitted event received:", data);
+      const bId = data?.bookingId;
+      toast({
+        title: "Doctor Admitted You",
+        description: "Connecting to active video room now...",
+      });
+      if (handleJoinCallRef.current) {
+        handleJoinCallRef.current({ _id: bId, id: bId });
+      }
+    });
+
+    const unbindEnded = presenceService.on("consultation:ended", (data) => {
+      console.log("Consultation ended event received:", data);
+      handleConsultationCompletedRef.current?.(data?.bookingId);
+    });
+
+    const unbindStatus = presenceService.on("booking:status", (data) => {
+      console.log("Booking status event received:", data);
+      if (data?.status === "postponed") {
+        toast({
+          title: "Appointment Postponed",
+          description: `The doctor has postponed your consultation by ${data.postponeMinutes || 15} minutes (${data.reason || "Doctor handling emergency"}).`,
+          variant: "destructive",
+        });
+        loadData();
+      } else if (data?.status === "rejected" || data?.status === "cancelled") {
+        toast({
+          title: "Appointment Cancelled / Declined",
+          description: data.reason || "The doctor declined this consultation request.",
+          variant: "destructive",
+        });
+        loadData();
+      } else if (data?.status === "completed") {
+        handleConsultationCompletedRef.current?.(data?.bookingId);
+      }
+    });
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== "undefined") {
+        bc = new BroadcastChannel("onyx-telehealth-session");
+        bc.onmessage = (event) => {
+          const msg = event.data;
+          if (msg?.type === "consultation-postponed") {
+            toast({
+              title: "Appointment Postponed",
+              description: `Consultation postponed by ${msg.postponeMinutes || 15}m: ${msg.note || "Doctor attending emergency"}`,
+              variant: "destructive",
+            });
+            loadData();
+          } else if (msg?.type === "consultation-rejected") {
+            toast({
+              title: "Consultation Declined",
+              description: msg.reason || "Doctor unable to take consultation",
+              variant: "destructive",
+            });
+            loadData();
+          } else if (msg?.type === "call-ended") {
+            handleConsultationCompletedRef.current?.(msg?.bookingId);
+          }
+        };
+      }
+    } catch {}
+
     return () => {
       // Cleanup video call on unmount
       if (localAudioRef.current) localAudioRef.current.close();
@@ -403,6 +468,12 @@ const Consultations = () => {
       if (clientRef.current) clientRef.current.leave();
       unbindAccepted();
       unbindMissed();
+      unbindAdmitted();
+      unbindEnded();
+      unbindStatus();
+      if (bc) {
+        try { bc.close(); } catch {}
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -478,6 +549,23 @@ const Consultations = () => {
         setRemoteUserConnected(false);
         setRemoteVideoTrackActive(false);
         handleConsultationCompletedRef.current?.();
+      });
+
+      // Agora RTC Token Renewal Listener (1 hour expiry)
+      client.on("token-privilege-will-expire", async () => {
+        try {
+          const bId = channelName.replace(/^room-/, "");
+          console.log("[Agora RTC] Token privilege expiring, renewing for booking:", bId);
+          if (bId) {
+            const tokenRes = await apiRequest(`/api/video/token/${bId}`).catch(() => null);
+            if (tokenRes?.token) {
+              await client.renewToken(tokenRes.token);
+              console.log("[Agora RTC] Token renewed successfully");
+            }
+          }
+        } catch (renewErr) {
+          console.warn("[Agora RTC] Failed to renew token:", renewErr);
+        }
       });
 
       const rtcToken = (token && !token.toLowerCase().includes("mock") && token.length > 30) ? token : null;

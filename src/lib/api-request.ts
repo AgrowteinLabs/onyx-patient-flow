@@ -40,7 +40,7 @@ const subscribeTokenRefresh = (cb: (token: string) => void) => {
   refreshSubscribers.push(cb);
 };
 
-const refreshAuthToken = async (): Promise<string> => {
+export const refreshAuthToken = async (): Promise<string> => {
   const accessToken = getAuthToken();
   const refreshToken = getRefreshToken();
   if (!accessToken || !refreshToken) throw new Error("Missing tokens");

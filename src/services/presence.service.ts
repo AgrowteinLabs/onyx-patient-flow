@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "@/lib/api-config";
+import { getAuthToken, refreshAuthToken } from "@/lib/api-request";
 
 export interface IncomingCallPayload {
   bookingId: string;
@@ -15,6 +16,7 @@ type PresenceEventHandler = (data: any) => void;
 class PresenceService {
   private ws: WebSocket | null = null;
   private reconnectTimer: any = null;
+  private heartbeatTimer: any = null;
   private listeners: Map<string, Set<PresenceEventHandler>> = new Map();
   private isConnecting = false;
 
@@ -25,14 +27,31 @@ class PresenceService {
     return `${protocol}//${host}/ws/presence`;
   }
 
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.send({ type: "ping" });
+      }
+    }, 25000);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
+
   public connect(): void {
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
 
+    const token = getAuthToken() || localStorage.getItem("token") || localStorage.getItem("accessToken") || localStorage.getItem("authToken");
     const userId = localStorage.getItem("userId");
-    if (!userId) {
-      console.debug("PresenceService: No userId found, skipping connection");
+    if (!token && !userId) {
+      console.debug("PresenceService: No auth token or userId found, skipping connection");
       return;
     }
 
@@ -46,20 +65,28 @@ class PresenceService {
         this.isConnecting = false;
         console.log("⚡ Presence WebSocket connected");
 
-        // Identify as patient upon connection
+        // Identify as patient with token authentication
         this.send({
           type: "identify",
           role: "patient",
-          userId,
+          token: token || "",
+          userId: userId || undefined,
         });
 
-        this.emit("connected", { userId });
+        // Start 25-second ping heartbeat
+        this.startHeartbeat();
+
+        this.emit("connected", { userId, token });
       };
 
       this.ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
           const eventType = data.type || data.event;
+
+          if (eventType === "pong") {
+            return;
+          }
 
           if (eventType) {
             this.emit(eventType, data.payload || data);
@@ -73,11 +100,29 @@ class PresenceService {
         console.debug("Presence WS error:", err);
       };
 
-      this.ws.onclose = () => {
+      this.ws.onclose = async (event: CloseEvent) => {
         this.isConnecting = false;
         this.ws = null;
-        // Auto-reconnect after 5 seconds if logged in
-        if (localStorage.getItem("userId")) {
+        this.stopHeartbeat();
+
+        // 4401 Unauthorized / Token Expired handling
+        if (event.code === 4401) {
+          console.warn("⚠️ Presence WS closed with 4401 (Token expired/unauthorized). Attempting token refresh...");
+          try {
+            const newToken = await refreshAuthToken();
+            if (newToken) {
+              console.log("✅ Token refreshed, reconnecting to Presence WS...");
+              this.connect();
+              return;
+            }
+          } catch (refreshErr) {
+            console.error("Presence WS token refresh failed:", refreshErr);
+          }
+        }
+
+        // Auto-reconnect after 5 seconds if authenticated
+        const hasAuth = getAuthToken() || localStorage.getItem("token") || localStorage.getItem("userId");
+        if (hasAuth) {
           if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
           this.reconnectTimer = setTimeout(() => {
             this.connect();
@@ -91,6 +136,7 @@ class PresenceService {
   }
 
   public disconnect(): void {
+    this.stopHeartbeat();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;

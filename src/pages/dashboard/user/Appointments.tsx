@@ -149,7 +149,7 @@ const Appointments = () => {
       // Filter by active profile
       const storedProfileId = localStorage.getItem("selectedProfileId");
       const bookingsArr = Array.isArray(bookingsList) ? bookingsList : [];
-      const filtered = bookingsArr.filter(b => b && (b.profileId === storedProfileId || !b.profileId));
+      const filtered = bookingsArr.filter(b => { if (!b) return false; const pId = typeof b.profileId === "string" ? b.profileId : b.profileId?._id || b.profileId?.id; return pId === storedProfileId || !pId; });
       setBookings(filtered);
       const docs = doctorsList || [];
       setDoctors(docs);
