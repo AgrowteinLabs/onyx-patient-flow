@@ -123,7 +123,7 @@ const Consultations = () => {
   const [micActive, setMicActive] = useState(true);
   const [cameraActive, setCameraActive] = useState(true);
   const [permissionModalOpen, setPermissionModalOpen] = useState(false);
-  const [callViewMode, setCallViewMode] = useState<"large" | "split">("large");
+  const [callViewMode, setCallViewMode] = useState<"split" | "large">("split");
   const [isCallFullscreen, setIsCallFullscreen] = useState(false);
   const videoStageRef = useRef<HTMLDivElement | null>(null);
 
@@ -1276,43 +1276,49 @@ const Consultations = () => {
                 <CallTimerBadge active={inVideoCall} />
               </div>
 
-              {/* Layout Switcher (Focus vs Split) */}
-              <div className="bg-white/10 backdrop-blur-md p-1 rounded-xl border border-white/10 hidden sm:flex items-center text-xs">
+              {/* View Mode Controller: Split Screen (Default) -> Full Width -> Full Screen */}
+              <div className="bg-white/10 backdrop-blur-md p-1 rounded-xl border border-white/10 hidden sm:flex items-center text-xs gap-1">
                 <button
-                  onClick={() => setCallViewMode("large")}
+                  onClick={() => {
+                    setCallViewMode("split");
+                    if (isCallFullscreen) toggleCallFullscreen();
+                  }}
                   className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
-                    callViewMode === "large"
-                      ? "bg-white/20 text-white shadow-xs"
-                      : "text-slate-400 hover:text-white"
+                    callViewMode === "split" && !isCallFullscreen
+                      ? "bg-white/25 text-white shadow-xs ring-1 ring-white/20"
+                      : "text-slate-300 hover:text-white"
                   }`}
-                  title="Full Width Focus View"
+                  title="Default: Split Screen (Side-by-side with Visit Details)"
+                >
+                  <SplitSquareVertical className="h-3.5 w-3.5" /> Split Screen
+                </button>
+                <button
+                  onClick={() => {
+                    setCallViewMode("large");
+                    if (isCallFullscreen) toggleCallFullscreen();
+                  }}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
+                    callViewMode === "large" && !isCallFullscreen
+                      ? "bg-white/25 text-white shadow-xs ring-1 ring-white/20"
+                      : "text-slate-300 hover:text-white"
+                  }`}
+                  title="Full Width: Expanded Video Canvas"
                 >
                   <Maximize2 className="h-3.5 w-3.5" /> Full Width
                 </button>
                 <button
-                  onClick={() => setCallViewMode("split")}
+                  onClick={toggleCallFullscreen}
                   className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
-                    callViewMode === "split"
-                      ? "bg-white/20 text-white shadow-xs"
-                      : "text-slate-400 hover:text-white"
+                    isCallFullscreen
+                      ? "bg-amber-400/25 text-amber-300 shadow-xs ring-1 ring-amber-400/30"
+                      : "text-slate-300 hover:text-white"
                   }`}
-                  title="Side-by-side with Visit Details"
+                  title={isCallFullscreen ? "Exit Fullscreen" : "Full Screen Native View"}
                 >
-                  <SplitSquareVertical className="h-3.5 w-3.5" /> Split
+                  {isCallFullscreen ? <Minimize2 className="h-3.5 w-3.5 text-amber-300" /> : <Maximize2 className="h-3.5 w-3.5" />}
+                  <span>{isCallFullscreen ? "Exit Fullscreen" : "Full Screen"}</span>
                 </button>
               </div>
-
-              {/* Fullscreen Button */}
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={toggleCallFullscreen}
-                className="h-9 px-3 rounded-xl bg-white/10 hover:bg-white/20 border-white/20 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
-                title={isCallFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
-              >
-                {isCallFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-                <span className="hidden sm:inline">{isCallFullscreen ? "Exit" : "Fullscreen"}</span>
-              </Button>
 
               {/* Leave Call Button */}
               <Button
@@ -1451,13 +1457,13 @@ const Consultations = () => {
                     <Sliders className="h-4.5 w-4.5 text-[#35B7C9]" />
                   </Button>
 
-                  {/* Layout Toggle */}
+                  {/* Layout Toggle (Split Screen vs Full Width) */}
                   <Button
                     variant="ghost"
                     size="icon"
                     onClick={() => setCallViewMode(prev => prev === "large" ? "split" : "large")}
                     className="rounded-full h-11 w-11 bg-white/10 hover:bg-white/20 text-white ring-1 ring-white/15 hidden sm:flex"
-                    title={callViewMode === "large" ? "Switch to Split Mode" : "Switch to Full Width Mode"}
+                    title={callViewMode === "large" ? "Switch to Split Screen" : "Switch to Full Width Mode"}
                   >
                     {callViewMode === "large" ? <SplitSquareVertical className="h-4.5 w-4.5 text-blue-400" /> : <Maximize2 className="h-4.5 w-4.5 text-blue-400" />}
                   </Button>
@@ -1468,7 +1474,7 @@ const Consultations = () => {
                     size="icon"
                     onClick={toggleCallFullscreen}
                     className="rounded-full h-11 w-11 bg-white/10 hover:bg-white/20 text-white ring-1 ring-white/15"
-                    title={isCallFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+                    title={isCallFullscreen ? "Exit Full Screen" : "Enter Full Screen"}
                   >
                     {isCallFullscreen ? <Minimize2 className="h-4.5 w-4.5 text-amber-300" /> : <Maximize2 className="h-4.5 w-4.5 text-amber-300" />}
                   </Button>
