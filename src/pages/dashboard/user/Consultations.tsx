@@ -35,7 +35,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Stethoscope,
-  Sparkles
+  Sparkles,
+  Maximize2,
+  Minimize2,
+  SplitSquareVertical
 } from "lucide-react";
 import AgoraRTC, { IAgoraRTCClient, ICameraVideoTrack, IMicrophoneAudioTrack } from "agora-rtc-sdk-ng";
 import { useSearchParams, useNavigate } from "react-router-dom";
@@ -120,6 +123,28 @@ const Consultations = () => {
   const [micActive, setMicActive] = useState(true);
   const [cameraActive, setCameraActive] = useState(true);
   const [permissionModalOpen, setPermissionModalOpen] = useState(false);
+  const [callViewMode, setCallViewMode] = useState<"large" | "split">("large");
+  const [isCallFullscreen, setIsCallFullscreen] = useState(false);
+  const videoStageRef = useRef<HTMLDivElement | null>(null);
+
+  const toggleCallFullscreen = () => {
+    if (!videoStageRef.current) return;
+    if (!document.fullscreenElement) {
+      videoStageRef.current.requestFullscreen().catch(() => {});
+      setIsCallFullscreen(true);
+    } else {
+      document.exitFullscreen().catch(() => {});
+      setIsCallFullscreen(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsCallFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", handleFsChange);
+    return () => document.removeEventListener("fullscreenchange", handleFsChange);
+  }, []);
 
   // Agora RTC states & refs (Option 1: 100% Pure Agora RTC)
   const clientRef = useRef<IAgoraRTCClient | null>(null);
@@ -1215,122 +1240,302 @@ const Consultations = () => {
         </div>
       </div>
 
-      {/* Main Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
-        {/* Left: Video Consultation Status / Active Call Panel */}
-        <div className="lg:col-span-7 space-y-6">
-          
-          {/* Live Call Control Panel */}
-          {inVideoCall ? (
-            <Card className="bg-slate-900 text-white border-none rounded-[20px] overflow-hidden shadow-2xl relative min-h-[420px] flex flex-col justify-between">
-              
-              {/* Doctor Video Feed (Big background) */}
-              <div id="remote-video" className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center overflow-hidden">
-                {/* Dedicated Agora Remote Container */}
-                <div
-                  id="remote-video-container"
-                  className={`absolute inset-0 w-full h-full object-cover z-0 ${
-                    remoteVideoTrackActive && remoteUserConnected ? "block" : "hidden"
-                  }`}
-                />
-
-                {(!remoteVideoTrackActive || !remoteUserConnected) && (
-                  <div className="text-center space-y-3 z-10 px-4">
-                    <div className="relative mx-auto h-24 w-24">
-                      {!remoteUserConnected && (
-                        <div className="absolute inset-0 rounded-full bg-emerald-500/25 pointer-events-none" />
-                      )}
-                      <div className="relative h-24 w-24 rounded-full bg-slate-800 border-2 border-slate-700/80 flex items-center justify-center text-slate-300 font-extrabold text-2xl shadow-xl">
-                        DR
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <h3 className="font-extrabold text-sm">{nextBooking?.doctorId?.name || "Attending Specialist"}</h3>
-                      <Badge className={`${remoteUserConnected ? "bg-emerald-500" : "bg-blue-600"} text-white text-[10px] font-bold border-none px-3 py-0.5`}>
-                        {remoteUserConnected ? "Doctor Connected" : "Calling Doctor... Ringing device"}
-                      </Badge>
-                    </div>
-                    {!remoteUserConnected && (
-                      <p className="text-[11px] text-slate-400 max-w-xs mx-auto leading-relaxed">
-                        Incoming call sent to doctor's dashboard. Waiting for doctor to accept...
-                      </p>
-                    )}
+      {inVideoCall ? (
+        /* LIVE CONSULTATION IMMERSIVE LARGE STAGE */
+        <div className="space-y-4 animate-fadeIn">
+          {/* Top In-Call HUD */}
+          <div className="relative overflow-hidden bg-[#0A101D] text-white p-4 lg:px-6 rounded-[24px] border border-white/10 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="h-11 w-11 rounded-[16px] bg-gradient-to-br from-[#0ea5e9] to-[#2563eb] p-0.5 shadow-md shrink-0">
+                  <div className="h-full w-full rounded-[14px] bg-[#0A101D] flex items-center justify-center font-black text-sm text-white">
+                    {nextBooking?.doctorId?.name ? nextBooking.doctorId.name[0] : "DR"}
                   </div>
-                )}
-                {remoteUserConnected && (
-                  <div className="absolute bottom-4 left-4 z-10 bg-black/60 px-3 py-1 rounded-md text-[10px] font-semibold text-emerald-400">
-                    Telehealth Live Stream
-                  </div>
-                )}
-              </div>
-
-              {/* Patient Video Feed (Floating Pip window) */}
-              <div 
-                id="local-video" 
-                className="absolute bottom-20 right-4 h-32 w-24 rounded-xl border border-slate-700/80 bg-slate-800 overflow-hidden shadow-md z-10 flex items-center justify-center"
-              >
-                <div
-                  id="local-video-container"
-                  className={`w-full h-full object-cover -scale-x-100 ${cameraActive ? "block" : "hidden"}`}
-                />
-                {!cameraActive && (
-                  <div className="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center z-20">
-                    <VideoOff className="h-6 w-6 text-slate-500 mb-1" />
-                    <span className="text-[9px] text-slate-400 font-bold uppercase">Off</span>
-                  </div>
-                )}
-                <div className="absolute bottom-1 left-2 text-[9px] bg-black/60 px-1.5 py-0.5 rounded text-white font-bold z-20">
-                  You
                 </div>
+                <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 border-2 border-[#0A101D] animate-pulse" />
               </div>
-
-              {/* Header Status overlay */}
-              <div className="p-4 z-10 bg-gradient-to-b from-black/80 to-transparent flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-rose-500"></span>
-                  <span className="text-xs font-bold uppercase tracking-wider text-rose-400">Live Consultation</span>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-base font-black text-white tracking-tight">
+                    {nextBooking?.doctorId?.name ? (nextBooking.doctorId.name.toLowerCase().startsWith("dr") ? nextBooking.doctorId.name : `Dr. ${nextBooking.doctorId.name}`) : "Consulting Specialist"}
+                  </h2>
+                  <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <ShieldCheck className="h-3 w-3 text-emerald-400" /> End-to-End Encrypted
+                  </Badge>
                 </div>
+                <p className="text-xs text-slate-400 font-medium">
+                  {nextBooking?.doctorId?.specialty || "Telehealth Consultation"} · Ref: {nextBooking?._id ? `#${String(nextBooking._id).slice(-6).toUpperCase()}` : "Active Call"}
+                </p>
+              </div>
+            </div>
+
+            {/* Right: Duration, Layout Toggle & Fullscreen */}
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <div className="bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/10 flex items-center gap-2 shadow-inner">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
                 <CallTimerBadge active={inVideoCall} />
               </div>
 
-              {/* Footer Controls overlay */}
-              <div className="p-5 z-10 bg-gradient-to-t from-black/80 to-transparent flex items-center justify-center gap-4">
-                {/* Mute Mic */}
-                <Button 
-                  onClick={toggleMic}
-                  variant="outline" 
-                  size="icon" 
-                  className={`h-11 w-11 rounded-full border-none shadow-md ${
-                    micActive ? "bg-white/10 hover:bg-white/20 text-white" : "bg-rose-600 hover:bg-rose-700 text-white"
+              {/* Layout Switcher (Focus vs Split) */}
+              <div className="bg-white/10 backdrop-blur-md p-1 rounded-xl border border-white/10 hidden sm:flex items-center text-xs">
+                <button
+                  onClick={() => setCallViewMode("large")}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
+                    callViewMode === "large"
+                      ? "bg-white/20 text-white shadow-xs"
+                      : "text-slate-400 hover:text-white"
                   }`}
+                  title="Full Width Focus View"
                 >
-                  {micActive ? <Mic className="h-4.5 w-4.5" /> : <MicOff className="h-4.5 w-4.5" />}
-                </Button>
-
-                {/* End Call */}
-                <Button 
-                  onClick={handleEndCall}
-                  className="h-11 px-6 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-lg"
-                >
-                  <PhoneOff className="h-4.5 w-4.5 mr-2" /> Leave Consultation
-                </Button>
-
-                {/* Toggle Camera */}
-                <Button 
-                  onClick={toggleCamera}
-                  variant="outline" 
-                  size="icon" 
-                  className={`h-11 w-11 rounded-full border-none shadow-md ${
-                    cameraActive ? "bg-white/10 hover:bg-white/20 text-white" : "bg-rose-600 hover:bg-rose-700 text-white"
+                  <Maximize2 className="h-3.5 w-3.5" /> Full Width
+                </button>
+                <button
+                  onClick={() => setCallViewMode("split")}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${
+                    callViewMode === "split"
+                      ? "bg-white/20 text-white shadow-xs"
+                      : "text-slate-400 hover:text-white"
                   }`}
+                  title="Side-by-side with Visit Details"
                 >
-                  {cameraActive ? <Video className="h-4.5 w-4.5" /> : <VideoOff className="h-4.5 w-4.5" />}
-                </Button>
+                  <SplitSquareVertical className="h-3.5 w-3.5" /> Split
+                </button>
               </div>
 
-            </Card>
-          ) : (
+              {/* Fullscreen Button */}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={toggleCallFullscreen}
+                className="h-9 px-3 rounded-xl bg-white/10 hover:bg-white/20 border-white/20 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                title={isCallFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+              >
+                {isCallFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                <span className="hidden sm:inline">{isCallFullscreen ? "Exit" : "Fullscreen"}</span>
+              </Button>
+
+              {/* Leave Call Button */}
+              <Button
+                onClick={handleEndCall}
+                className="bg-rose-600 hover:bg-rose-700 text-white font-black text-xs h-9 px-4 rounded-xl shadow-md flex items-center gap-1.5"
+              >
+                <PhoneOff className="h-3.5 w-3.5" /> Leave
+              </Button>
+            </div>
+          </div>
+
+          {/* Video Stage Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+            {/* Main Video Viewport (Col-span 12 in large mode, 8 in split mode) */}
+            <div
+              className={`${
+                callViewMode === "large" ? "lg:col-span-12" : "lg:col-span-8"
+              } transition-all duration-300 w-full`}
+            >
+              <div
+                ref={videoStageRef}
+                className="relative w-full h-[74vh] min-h-[600px] max-h-[880px] rounded-[28px] overflow-hidden border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] bg-[#090D16] flex flex-col justify-between group"
+              >
+                {/* Remote Doctor Video Feed */}
+                <div id="remote-video" className="absolute inset-0 w-full h-full object-cover">
+                  <div
+                    id="remote-video-container"
+                    className={`absolute inset-0 w-full h-full object-cover z-0 ${
+                      remoteVideoTrackActive && remoteUserConnected ? "block" : "hidden"
+                    }`}
+                  />
+
+                  {/* Elegant Waiting / Connecting Screen */}
+                  {(!remoteVideoTrackActive || !remoteUserConnected) && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300 z-10 p-6 text-center bg-gradient-to-b from-[#0F172A] via-[#090D16] to-[#050811]">
+                      <div className="relative mb-5">
+                        <div className="absolute -inset-4 rounded-full bg-[#0ea5e9]/15 animate-ping" />
+                        <div className="absolute -inset-2 rounded-full bg-[#2563eb]/20 animate-pulse" />
+                        <div className="relative h-28 w-28 rounded-full bg-gradient-to-br from-slate-800 to-slate-900 border border-white/15 flex items-center justify-center shadow-2xl">
+                          <span className="text-3xl font-black text-white">
+                            {nextBooking?.doctorId?.name ? nextBooking.doctorId.name[0] : "DR"}
+                          </span>
+                        </div>
+                        <div className="absolute bottom-1 right-1 h-7 w-7 rounded-full bg-emerald-500 border-2 border-[#090D16] flex items-center justify-center">
+                          <Video className="h-3.5 w-3.5 text-white" />
+                        </div>
+                      </div>
+
+                      <h3 className="text-lg font-black text-white tracking-tight mb-1">
+                        {remoteUserConnected
+                          ? `${nextBooking?.doctorId?.name || "Doctor"}'s Camera Paused`
+                          : `Connecting with Dr. ${nextBooking?.doctorId?.name || "Attending Specialist"}...`}
+                      </h3>
+                      <p className="text-xs text-slate-400 max-w-sm mb-4">
+                        {remoteUserConnected
+                          ? "The doctor has disabled their camera or is reviewing your clinical reports. Audio stream is live."
+                          : "Encrypted telehealth channel initialized. Ringing doctor's terminal..."}
+                      </p>
+
+                      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[11px] text-slate-300 font-mono">
+                        <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>Agora HD Engine Active</span>
+                        <span className="text-white/20">|</span>
+                        <span>E2E Encrypted</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {remoteVideoTrackActive && remoteUserConnected && (
+                    <div className="absolute bottom-5 left-5 z-20 bg-black/60 backdrop-blur-md px-3.5 py-1.5 rounded-full text-xs font-semibold text-emerald-400 flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span>Dr. {nextBooking?.doctorId?.name || "Consulting Specialist"}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Floating Patient Self-View (PiP) */}
+                <div 
+                  id="local-video" 
+                  className="absolute bottom-24 right-5 sm:right-7 w-44 h-32 sm:w-52 sm:h-38 rounded-[22px] overflow-hidden border-2 border-white/20 shadow-[0_10px_30px_rgba(0,0,0,0.6)] bg-slate-900/90 backdrop-blur-md z-20 group/pip transition-all hover:scale-105"
+                >
+                  <div
+                    id="local-video-container"
+                    className={`w-full h-full object-cover -scale-x-100 ${cameraActive ? "block" : "hidden"}`}
+                  />
+                  {!cameraActive && (
+                    <div className="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center text-slate-400 text-xs">
+                      <VideoOff className="h-6 w-6 mb-1 text-rose-400" />
+                      <span className="font-semibold text-[11px]">Camera Muted</span>
+                    </div>
+                  )}
+                  <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[10px] font-bold z-10">
+                    <span className="bg-black/70 backdrop-blur-md px-2 py-0.5 rounded-full text-white font-mono flex items-center gap-1">
+                      <span className={`h-1.5 w-1.5 rounded-full ${micActive ? "bg-emerald-400" : "bg-rose-500"}`} />
+                      You (Patient)
+                    </span>
+                  </div>
+                </div>
+
+                {/* Centered Floating Glassmorphic Control Dock */}
+                <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 bg-slate-950/85 backdrop-blur-2xl border border-white/15 px-5 py-2.5 rounded-full shadow-[0_12px_40px_rgba(0,0,0,0.6)]">
+                  {/* Microphone Toggle */}
+                  <Button 
+                    variant="ghost"
+                    size="icon"
+                    onClick={toggleMic}
+                    className={`rounded-full h-11 w-11 transition-all ${
+                      micActive ? "bg-white/10 hover:bg-white/20 text-white ring-1 ring-white/15" : "bg-rose-600 hover:bg-rose-700 text-white ring-2 ring-rose-500/50"
+                    }`}
+                    title={micActive ? "Mute Microphone" : "Unmute Microphone"}
+                  >
+                    {micActive ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
+                  </Button>
+
+                  {/* Camera Toggle */}
+                  <Button 
+                    variant="ghost"
+                    size="icon"
+                    onClick={toggleCamera}
+                    className={`rounded-full h-11 w-11 transition-all ${
+                      cameraActive ? "bg-white/10 hover:bg-white/20 text-white ring-1 ring-white/15" : "bg-rose-600 hover:bg-rose-700 text-white ring-2 ring-rose-500/50"
+                    }`}
+                    title={cameraActive ? "Turn Off Camera" : "Turn On Camera"}
+                  >
+                    {cameraActive ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
+                  </Button>
+
+                  {/* Permissions Settings */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setPermissionModalOpen(true)}
+                    className="rounded-full h-11 w-11 bg-white/10 hover:bg-white/20 text-white ring-1 ring-white/15"
+                    title="Camera & Mic Settings"
+                  >
+                    <Sliders className="h-4.5 w-4.5 text-[#35B7C9]" />
+                  </Button>
+
+                  {/* Layout Toggle */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setCallViewMode(prev => prev === "large" ? "split" : "large")}
+                    className="rounded-full h-11 w-11 bg-white/10 hover:bg-white/20 text-white ring-1 ring-white/15 hidden sm:flex"
+                    title={callViewMode === "large" ? "Switch to Split Mode" : "Switch to Full Width Mode"}
+                  >
+                    {callViewMode === "large" ? <SplitSquareVertical className="h-4.5 w-4.5 text-blue-400" /> : <Maximize2 className="h-4.5 w-4.5 text-blue-400" />}
+                  </Button>
+
+                  {/* Fullscreen Toggle */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={toggleCallFullscreen}
+                    className="rounded-full h-11 w-11 bg-white/10 hover:bg-white/20 text-white ring-1 ring-white/15"
+                    title={isCallFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+                  >
+                    {isCallFullscreen ? <Minimize2 className="h-4.5 w-4.5 text-amber-300" /> : <Maximize2 className="h-4.5 w-4.5 text-amber-300" />}
+                  </Button>
+
+                  <div className="h-6 w-[1px] bg-white/20 mx-1" />
+
+                  {/* Leave Consultation Button */}
+                  <Button 
+                    onClick={handleEndCall}
+                    className="h-11 px-5 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-lg shadow-rose-600/40 flex items-center gap-1.5"
+                  >
+                    <PhoneOff className="h-4 w-4" />
+                    <span>Leave Call</span>
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Split Companion Side Panel */}
+            {callViewMode === "split" && (
+              <div className="lg:col-span-4 space-y-4 animate-fadeIn">
+                <Card className="bg-white border-slate-100 shadow-md rounded-[24px] p-5 space-y-4">
+                  <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+                    <div className="h-11 w-11 rounded-2xl bg-blue-50 text-[#2563eb] flex items-center justify-center font-black text-sm uppercase">
+                      {nextBooking?.doctorId?.name ? nextBooking.doctorId.name[0] : "D"}
+                    </div>
+                    <div>
+                      <h4 className="font-extrabold text-slate-800 text-sm">
+                        Dr. {nextBooking?.doctorId?.name || "Consulting Specialist"}
+                      </h4>
+                      <p className="text-xs text-slate-500 font-medium">
+                        {nextBooking?.doctorId?.specialty || "Telehealth Consultation"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between text-slate-500">
+                      <span>Consultation Mode:</span>
+                      <span className="font-bold text-slate-800 capitalize">{nextBooking?.type || "Telehealth Video"}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500">
+                      <span>Reason / Concern:</span>
+                      <span className="font-bold text-slate-800 truncate max-w-[160px]">{nextBooking?.condition || nextBooking?.reason || "Clinical Evaluation"}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500">
+                      <span>Booking ID:</span>
+                      <span className="font-mono font-bold text-slate-700">{nextBooking?._id ? `#${String(nextBooking._id).slice(-6).toUpperCase()}` : "Active"}</span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Clinical Notes</span>
+                    <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                      The doctor is currently taking live clinical notes. Once the call concludes, your digital prescription will appear on your dashboard.
+                    </p>
+                  </div>
+                </Card>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* Regular Dual Column Grid when not in video call */
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Left: Video Consultation Status / Active Call Panel */}
+          <div className="lg:col-span-7 space-y-6">
             <Card className="bg-white border-slate-100 shadow-md rounded-[20px] p-6 relative overflow-hidden flex flex-col justify-between min-h-[300px]">
               
               <div className="space-y-4">
@@ -1436,7 +1641,6 @@ const Consultations = () => {
               </div>
 
             </Card>
-          )}
 
           {/* Consultation Summaries List */}
           <Card className="bg-white border-slate-100 shadow-sm rounded-[20px]">
@@ -1695,6 +1899,7 @@ const Consultations = () => {
         </div>
 
       </div>
+      )}
 
       {/* Diagnostic Session Summary Logs Dialog */}
       <Dialog open={openDetailDialog} onOpenChange={setOpenDetailDialog}>
